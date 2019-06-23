@@ -1,5 +1,8 @@
 # Prerequisites
 *.d
+*.sw*       # vim temp files
+.DS_Store   # macos
+._*         #
 
 # Object files
 *.o
