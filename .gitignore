@@ -3,6 +3,7 @@
 *.sw*       # vim temp files
 .DS_Store   # macos
 ._*         #
+famine
 
 # Object files
 *.o
