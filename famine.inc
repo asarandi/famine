@@ -354,3 +354,7 @@ O_PATH                              equ 0o10000000
 
 DT_REG                              equ 8
 
+PROT_READ                           equ 0x1
+PROT_WRITE                          equ 0x2
+MAP_SHARED                          equ 0x01
+
