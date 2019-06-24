@@ -1,3 +1,8 @@
+ELF_SYSV                            equ 0x00010102464c457f
+ELF_GNU                             equ 0x03010102464c457f
+ELF64_ET_DYN                        equ 0x00000001003e0003
+ELF64_ET_EXEC                       equ 0x00000001003e0002
+
 ; /usr/include/x86_64-linux-gnu/asm/unistd_64.h
 
 __NR_read                           equ 0

