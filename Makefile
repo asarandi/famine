@@ -4,7 +4,7 @@ famine: famine.o
 	/usr/bin/printf '\x7' | dd conv=notrunc of=famine_dyn bs=1 count=1 seek=180
 
 famine.o:
-	nasm -f elf64 famine.s
+	nasm -f elf64 famine.asm
 
 clean:
 	rm -f famine_dyn famine_exec famine.o
