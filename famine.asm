@@ -45,9 +45,8 @@ _start:
                 mov         rax, [rel entry]
                 test        rdx, rdx
                 jz          .entry_ready
-                call        .delta
-.delta:         pop         rcx
-                sub         rcx, .delta - _start
+                lea         rcx, [rel .delta]
+.delta:         sub         rcx, .delta - _start
                 sub         rcx, rdx
                 add         rax, rcx
 .entry_ready:
@@ -171,7 +170,7 @@ is_valid_elf64:                                                 ; expecing data 
                 mov         rdx, ELF_SYSV
                 cmp         qword [rdi], rdx
                 jz          .continue
-                mov         rdx, ELF_SYSV
+                mov         rdx, ELF_GNU
                 cmp         qword [rdi], rdx
                 jnz         .return
 .continue:      mov         rdx, ELF64_ET_DYN
