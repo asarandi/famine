@@ -229,8 +229,6 @@ insert:                                                         ; expecting data
                 mov         [rdi - 0x08], rax                   ; _finish - 8 = entry
                 mov         [rdi - 0x10], r13                   ; _finish - 16 = pie_address
                 mov         qword [r15 + 0x18], r13             ; fix entry point
-                mov         rax, 0x0000000700000001             ; p_flags, writable
-                mov         qword [r14], rax
                 mov         rax, _finish - _start
                 add         qword [r14 + 0x20], rax             ; increase p_filesz
                 add         qword [r14 + 0x28], rax             ; increase p_memsz
