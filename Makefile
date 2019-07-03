@@ -1,12 +1,26 @@
-famine: famine.o
-	ld -s -N famine.o -o famine_exec
-	ld -s -pie -lc -dynamic-linker /lib64/ld-linux-x86-64.so.2 famine.o -o famine_dyn
-	/usr/bin/printf '\x7' | dd conv=notrunc of=famine_dyn bs=1 count=1 seek=180
+UNAME := $(shell uname -s)
 
-famine.o:
-	nasm -f elf64 famine.asm
+SRC := famine.asm
+OBJ := famine.o
+ASMFLAGS := -f elf64
+LDFLAGS := -N -s
+
+ifeq ($(UNAME), Darwin)
+	SRC := famine_macos.asm
+	OBJ := famine_macos.o
+	ASMFLAGS := -f macho64
+	LDFLAGS := -no_pie -macosx_version_min 10.7 -arch x86_64 -e _start
+endif
+
+
+famine: $(OBJ)
+	ld $(LDFLAGS) $^ -o famine_exec
+	strip famine_exec
+
+$(OBJ):
+	nasm $(ASMFLAGS) $(SRC)
 
 clean:
-	rm -f famine_dyn famine_exec famine.o
+	rm -f famine_exec $(OBJ)
 
 re: clean famine
