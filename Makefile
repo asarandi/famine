@@ -6,8 +6,8 @@ ASMFLAGS := -f elf64
 LDFLAGS := -N -s
 
 ifeq ($(UNAME), Darwin)
-	SRC := famine_macos.asm
-	OBJ := famine_macos.o
+	SRC := famine.asm
+	OBJ := famine.o
 	ASMFLAGS := -f macho64
 	LDFLAGS := -no_pie -macosx_version_min 10.7 -arch x86_64 -e _start
 endif
@@ -15,7 +15,6 @@ endif
 
 famine: $(OBJ)
 	ld $(LDFLAGS) $^ -o famine_exec
-	strip famine_exec
 
 $(OBJ):
 	nasm $(ASMFLAGS) $(SRC)

