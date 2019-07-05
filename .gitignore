@@ -7,10 +7,6 @@ famine
 famine_dyn
 famine_exec
 
-*_dynamic
-*_static
-*_nopie
-
 # Object files
 *.o
 *.ko
