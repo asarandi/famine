@@ -3,7 +3,7 @@ UNAME := $(shell uname -s)
 SRC := famine.asm
 OBJ := famine.o
 ASMFLAGS := -f elf64
-LDFLAGS := -N -s
+LDFLAGS :=
 
 ifeq ($(UNAME), Darwin)
 	SRC := famine.asm
