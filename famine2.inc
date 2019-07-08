@@ -14,7 +14,7 @@
 %define __NR_mmap                                9
 %define __NR_munmap                              11
 %define __NR_getdents                            78
-%define __NR_fchdir                              81
+%define __NR_chmod                               90
 
 %define Darwin__NR_write                         0x04
 %define Darwin__NR_exit                          0x01
@@ -24,7 +24,7 @@
 %define Darwin__NR_mmap                          0xc5 
 %define Darwin__NR_munmap                        0x49
 %define Darwin__NR_getdents                      0xc4
-%define Darwin__NR_fchdir                        0x0d
+%define Darwin__NR_chmod                         0x0f
 
 %define O_RDONLY                                 0o0000000
 %define O_WRONLY                                 0o0000001

