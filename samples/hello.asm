@@ -1,5 +1,5 @@
-%define Darwin__NR_write                          equ 0x2000004
-%define Darwin__NR_exit                           equ 0x2000001
+%define Darwin__NR_write                         0x2000004
+%define Darwin__NR_exit                          0x2000001
 
 %define __NR_write                               1
 %define __NR_exit                                60
