@@ -1,25 +1,30 @@
 UNAME := $(shell uname -s)
 
+NAME := famine_exec
 SRC := famine.asm
 OBJ := famine.o
 ASMFLAGS := -f elf64
-LDFLAGS :=
 
 ifeq ($(UNAME), Darwin)
 	SRC := famine.asm
 	OBJ := famine.o
 	ASMFLAGS := -f macho64
-	LDFLAGS := -no_pie -macosx_version_min 10.7 -arch x86_64 -e _start
+	LDFLAGS := -macosx_version_min 10.7 -arch x86_64 -e _start
 endif
 
 
-famine: $(OBJ)
-	ld $(LDFLAGS) $^ -o famine_exec
+all: $(NAME)
+
+$(NAME): $(OBJ)
+	ld $(LDFLAGS) $^ -o $(NAME)
 
 $(OBJ):
 	nasm $(ASMFLAGS) $(SRC)
 
 clean:
-	rm -f famine_exec $(OBJ)
+	rm -f $(OBJ)
 
-re: clean famine
+fclean: clean
+	rm -f $(NAME)
+
+re: fclean $(NAME)

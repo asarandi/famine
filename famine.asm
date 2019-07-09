@@ -352,7 +352,7 @@ insert_macho64:                                                 ; expecting data
                 jnz         .next_lcmd
                 test        r12, r12
                 jz          .return
-                mov         r13, rdi                            ; r13 points to entry_point_command
+                lea         r13, [rdi+8]                        ; r13 points to entry_point_command
                                                                 ; qword at [r13 + 8] is entryoff
                 mov         rdi, rsi
                 mov         eax, dword [r12 + 0x48 + 0x30]      ; file offset of __text section
@@ -373,8 +373,8 @@ insert_macho64:                                                 ; expecting data
                 lea         rsi, [rel _start]
                 rep         movsb
 
-                mov         rcx, qword [r13 + 8]                ; get entry point
-                mov         qword [r13 + 8], rax
+                mov         rcx, qword [r13]                ; get entry point
+                mov         qword [r13], rax
 
                 mov         qword [rdi - 8], rcx                ; store entry point
                 mov         qword [rdi - 16], rax               ; store pos
@@ -421,6 +421,6 @@ _platform:
             db 1
 %endif
 
-pie_address dq _start
-entry       dq _host
-_finish     equ $
+pie_address dq (_start - strlen)
+entry       dq (_host - strlen)
+_finish:
