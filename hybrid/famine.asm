@@ -18,7 +18,7 @@ _host:
 %ifidn __OUTPUT_FORMAT__, elf64
                 mov         rax, __NR_write
 %elifidn __OUTPUT_FORMAT__, macho64
-                mov         rax, Darwin__NR_write | rax, 0x02000000
+                mov         rax, Darwin__NR_write | 0x02000000
 %endif
                 syscall
 
