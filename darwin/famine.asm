@@ -1,4 +1,4 @@
-; famine dawrin - size 675 bytes
+; famine darwin - size 675 bytes
 
 %include "famine.inc"
 

