@@ -1,6 +1,6 @@
 UNAME := $(shell uname -s)
 
-NAME := famine_exec
+NAME := famine
 SRC := famine.asm
 OBJ := famine.o
 ASMFLAGS := -f elf64

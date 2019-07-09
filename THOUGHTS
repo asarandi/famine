@@ -1,8 +1,0 @@
-06/25/2019:
-    current size: host = 128, famine = 798;     total = 926 bytes
-    current project goal: optimize for size
-      - remove / reduce redundant code
-      - remove / reduce dq type variables
-        if i can remove all variables it should be possible to keep the code segment flags at RE instead of RWE
-
-
