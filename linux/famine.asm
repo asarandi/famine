@@ -256,7 +256,7 @@ insert_elf64:                                                   ; expecting data
                 ret
 
 slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
-signature       db          "famine! elf64 @42siliconvalley",0
+signature       db          "famine! linux @42siliconvalley",0
 
 pie_address     dq          (_start - _host)
 entry           dq          0

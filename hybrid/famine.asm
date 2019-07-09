@@ -63,6 +63,7 @@ _start:
                 mov         rdi, [rsp-0x30]                     ;directory fd
                 mov         rax, __NR_getdents
                 translate_syscall
+                jc          .closedir
                 test        rax, rax
                 jle         .closedir
 
