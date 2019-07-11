@@ -1,6 +1,3 @@
-%define BUF_SIZE                                 1024
-%define LOCAL_VARS                               1024
-
 %define ELF_SYSV                                 0x00010102464c457f
 %define ELF_GNU                                  0x03010102464c457f
 %define ELF64_ET_DYN                             0x00000001003e0003
