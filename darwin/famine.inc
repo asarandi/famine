@@ -1,5 +1,3 @@
-%define BUF_SIZE                                 1024
-%define LOCAL_VARS                               1024
 %define LC_SEGMENT_64                            0x19
 %define LC_MAIN                                  0x80000028
 

