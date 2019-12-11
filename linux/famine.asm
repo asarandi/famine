@@ -8,18 +8,8 @@ global _start
 section .text
 
 _host:
-                mov         rdx, 13
-                mov         rax, 1
-                mov         rdi, rax
-                lea         rsi, [rel hello]
-               
-                mov         rax, __NR_write
+                mov         rax, __NR_exit						; empty program
                 syscall
-
-                xor         rdi, rdi
-                mov         rax, __NR_exit
-                syscall
-hello           db          "hello world",33,10,0
 
 _start:
                 push        rdi
