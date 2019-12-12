@@ -29,3 +29,19 @@
 .d_reclen	resw	1
 .d_name		resb	1
 	endstruc
+
+	struc	stat
+.st_dev		resq	1
+.st_ino		resq	1
+.st_mode	resd	1
+.st_nlink	resq	1
+.st_uid		resd	1
+.st_gid		resd	1
+.st_rdev	resq	1
+.st_size	resq	1
+.st_blksize	resq	1
+.st_blocks	resq	1
+.st_atim	resq	2
+.st_mtim	resq	2
+.st_ctim	resq	2
+	endstruc

