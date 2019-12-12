@@ -22,3 +22,10 @@
 %define PROT_READ                                0x1
 %define PROT_WRITE                               0x2
 %define MAP_SHARED                               0x01
+
+	struc	dirent
+.d_ino:		resq	1
+.d_off:		resq	1
+.d_reclen	resw	1
+.d_name		resb	1
+	endstruc

@@ -36,7 +36,7 @@ _start:
 
 .readdir:
                 mov         rdx, 0x400
-                lea         rsi, [rsp-0x800]
+                lea         rsi, [rsp-0x800]					; dirent
                 mov         rdi, [rsp-0x100]                    ;directory fd
                 mov         rax, __NR_getdents
                 syscall
@@ -46,19 +46,14 @@ _start:
                 xor         r13, r13
                 mov         r12, rax
 .file:
-                lea         rdi, [rsp-0x800]
-                add         rdi, r13
+                lea         rdi, [rsp-0x800]                    ; dirent pointer
+                add         rdi, r13                            ; get next dirent
 
-                xor         edx, edx
-
-                mov         dx, word [rdi + 0x10]               ; linux d_reclen
-                dec         edx
-                mov         al, byte [rdi + rdx]                ; linux d_type
-                inc         edx
-                add         rdi, 18                             ; linux d_name
+                movzx       edx, word [rdi + dirent.d_reclen]   ; size of dirent
+                mov         al, byte [rdi + rdx - 1]            ; file type
+                add         rdi, dirent.d_name                  ; pointer to filename
 .increment_idx:
-                add         r13, rdx
-
+                add         r13, [rdi + rdx]                    ; increment dirent pointer
                 cmp         al, DT_REG
                 jne         .nextfile
 
