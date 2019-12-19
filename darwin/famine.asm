@@ -1,4 +1,4 @@
-; famine darwin - size 706 bytes
+; famine darwin - size 705 bytes
 
 %include "famine.inc"
 
@@ -243,7 +243,7 @@ insert_macho64:                                                 ; expecting data
                 pop         r12
                 ret
 
-slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
+slash_tmp       db          "/tmp/test/",0,"/tmp/test2/",0,0
 signature       db          "famine! darwin @42siliconvalley",0
 
 pie_address     dq          (_start - _host)

@@ -12,7 +12,7 @@ famine is the first of four vx projects at 42 school - the objective of the proj
 famine is very straightforward; pseudo code:
 
 ```python
-folders = ['/tmp/test1', '/tmp/test2']
+folders = ['/tmp/test', '/tmp/test2']
 
 for folder in folders:
     for file in folder:

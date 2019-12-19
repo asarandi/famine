@@ -1,4 +1,4 @@
-; famine elf64 - size 727 bytes
+; famine elf64 - size 726 bytes
 
 %include "famine.inc"
 
@@ -235,7 +235,7 @@ inject_virus:
 				ret
 
 	; persistent Data
-infect_dir		db			"/tmp/test1/",0,"/tmp/test2/",0,0
+infect_dir		db			"/tmp/test/",0,"/tmp/test2/",0,0
 signature		db			"famine! linux @42siliconvalley",0
 virus_entry		dq			_start
 host_entry		dq			_host

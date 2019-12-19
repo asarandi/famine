@@ -1,4 +1,4 @@
-; famine hybrid - size 1139 bytes
+; famine hybrid - size 1138 bytes
 
 %include "famine.inc"
 
@@ -388,7 +388,7 @@ _translate_syscall:                                             ; expecting r15 
 .ready:         syscall
                 ret
 
-slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
+slash_tmp       db          "/tmp/test/",0,"/tmp/test2/",0,0
 signature       db          "famine! hybrid @42siliconvalley",0
 
 _platform:
