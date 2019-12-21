@@ -41,7 +41,7 @@
 ; Famine constants
 
 %define VIRUS_SIZE			(_finish - _start)
-%define VARS(x)				[(rsp - famine_size) + x]
+%define VARS(x)				[(rbp - famine_size) + x]
 %define	DIRENT_ARR_SIZE		1024
 
 

