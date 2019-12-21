@@ -242,7 +242,7 @@ inject_virus:
 
 	; persistent data
 infect_dir		db			"/tmp/test/",0,"/tmp/test2/",0,0
-signature		db			"famine! linux @42siliconvalley",0
+signature		db			"Famine version 1.0 (c)oded by asarandi-sgardner",0
 virus_entry		dq			_start
 host_entry		dq			_host
 _finish:

